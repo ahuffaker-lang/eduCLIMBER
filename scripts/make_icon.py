@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Generate the app icon: Resources/AppIcon.png and Resources/AppIcon.icns.
 
+A record sheet beside rising reading levels, in the district's red, black and
+white. The palette constants below are the place to adjust the colours.
+
     python3 scripts/make_icon.py
 
 The artwork is drawn here rather than stored as a binary blob, so it can be
@@ -19,13 +22,14 @@ SIZE = 1024
 SCALE = 4  # draw large, downsample once -- cheap anti-aliasing
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-BLUE_TOP = (59, 130, 246)
-BLUE_BOTTOM = (29, 78, 216)
+# District colours: red, black and white.
+GROUND_TOP = (216, 28, 58)
+GROUND_BOTTOM = (154, 12, 35)
 PAPER = (255, 255, 255)
-RULE = (203, 213, 225)
-RULE_HEAD = (96, 165, 250)
-STEP = (251, 191, 36)
-STEP_TOP = (253, 224, 71)
+RULE = (214, 214, 219)      # a tint of black, so the ruled lines stay quiet
+RULE_HEAD = (200, 16, 46)
+STEP = (24, 24, 27)
+STEP_TOP = (24, 24, 27)
 
 
 def draw_icon() -> Image.Image:
@@ -38,7 +42,8 @@ def draw_icon() -> Image.Image:
     for y in range(side):
         ratio = y / (side - 1)
         colour = tuple(
-            round(BLUE_TOP[channel] + (BLUE_BOTTOM[channel] - BLUE_TOP[channel]) * ratio)
+            round(GROUND_TOP[channel]
+                  + (GROUND_BOTTOM[channel] - GROUND_TOP[channel]) * ratio)
             for channel in range(3)
         )
         for x in range(side):
@@ -62,7 +67,7 @@ def draw_icon() -> Image.Image:
         draw.rounded_rectangle(
             box(172, top, 448, top + 34), radius=17 * SCALE, fill=RULE)
 
-    # The climb: reading levels rising to the right.
+    # The climb: reading levels rising to the right, in black.
     draw.rounded_rectangle(box(540, 615, 648, 825), radius=24 * SCALE, fill=STEP)
     draw.rounded_rectangle(box(668, 470, 776, 825), radius=24 * SCALE, fill=STEP)
     draw.rounded_rectangle(box(796, 325, 904, 825), radius=24 * SCALE, fill=STEP_TOP)
