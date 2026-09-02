@@ -1,37 +1,44 @@
-# eduCLIMBER Assessment Converter
+# eduCLIMBER Assessment Converter (macOS)
 
-A small desktop app that reshapes a **Running Records** reading-assessment export
+A native Mac app that reshapes a **Running Records** reading-assessment export
 into the 15-column CSV that eduCLIMBER's upload expects.
 
 Pick the export → choose the assessment window and school year → the app validates
-every row and writes the eduCLIMBER file.
+every row and writes the eduCLIMBER file. Swift + AppKit, built with Xcode, with no
+third-party dependencies (`.xlsx` files are read directly).
 
-## Running it
+## Getting the app
 
-**From a packaged executable** (what most users get): double-click
-`eduCLIMBER-Converter` — no Python install needed.
+**Option 1 — download a build (no Xcode needed).** Every push to a build branch
+runs the *macOS app* workflow on GitHub. Open the repository's **Actions** tab,
+click the most recent green run, and download the `eduCLIMBER-Converter-macos`
+artifact. Unzip it and drag `eduCLIMBER Converter.app` into `/Applications`.
 
-**From source:**
-
-```bash
-python run_app.py                     # opens the window
-pip install -r requirements.txt       # only needed to read .xlsx files
-```
-
-There is also a command line for scripted runs:
+**Option 2 — build it yourself:**
 
 ```bash
-python run_app.py --cli export.xlsx \
-    --assessment-window "Trimester 1" --school-year 2026-2027 [--out result.csv]
+./scripts/build_app.sh          # tests, builds, signs, produces build/eduCLIMBER Converter.app
 ```
 
-Exit codes: `0` success, `1` row-level problems (nothing written), `2` file or
-prompt problem.
+**Option 3 — Xcode.** `File > Open…`, select `Package.swift`, choose the
+**eduCLIMBER-Converter** scheme, and press Run (⌘R). `⌘U` runs the tests.
+
+### First launch
+
+The app is signed ad-hoc, not with a paid Apple Developer certificate, so macOS
+treats it as coming from an unidentified developer. The first time only:
+**right-click the app → Open → Open**. After that, double-clicking works normally.
+(Opening it by double-click first shows a dialog with no Open button — that is
+Gatekeeper, not a broken build.)
+
+Requires macOS 12 or later. The downloaded build is universal (Apple Silicon and
+Intel).
 
 ## Source file
 
-CSV or Excel, with these columns (header text is matched case-insensitively and
-ignoring punctuation/spacing, so `reading_level` or `READING LEVEL (A-Z)` are fine):
+CSV or Excel (`.xlsx`), with these columns. Header text is matched
+case-insensitively and ignoring punctuation and spacing, so `reading_level` or
+`READING LEVEL (A-Z)` are fine:
 
 | Column | Notes |
 |---|---|
@@ -41,29 +48,21 @@ ignoring punctuation/spacing, so `reading_level` or `READING LEVEL (A-Z)` are fi
 | `Reading Level (A-Z)` | `Below A`, `A`–`Z` |
 | `Proficiency Level` | passed through as-is |
 
+`samples/sample_running_records.csv` is a small example to try it on.
+
 ### When a column is misnamed or misspelled
 
 The app never guesses at a header it doesn't recognize. If a column is misspelled
-(`Readng Levl (A-Z)`) or renamed (`Rdg Level A-Z`), a **Match columns** dialog opens
-and asks which column in your file holds each expected one, with the closest header
-pre-selected — accept it or pick another from the dropdown. Choose
+(`Readng Levl (A-Z)`) or renamed (`Rdg Level A-Z`), a **Match Columns** sheet asks
+which column in your file holds each expected one, with the closest header
+pre-selected — accept it or pick another from the menu. Choose
 `— not in this file —` for a column that genuinely isn't there (only allowed for
 optional columns). One file column can't be assigned to two expected columns.
 
 Your choices are remembered for that file, so re-converting after changing the
-window or school year doesn't ask again. **Match columns...** in the main window
-opens the same dialog any time, including when everything matched automatically —
+window or school year doesn't ask again. **Match Columns…** in the main window
+opens the same sheet any time, including when everything matched automatically —
 useful for checking a column wasn't matched to the wrong header.
-
-On the command line, unmatched columns are prompted for interactively; in a script
-(or with `--no-prompt`) the run fails with the closest-match suggestion and you
-supply the answer with repeatable `--map` flags:
-
-```bash
-python run_app.py --cli export.csv --assessment-window "Trimester 1" \
-    --school-year 2026-2027 \
-    --map student=Studnt --map "reading_level=Readng Levl (A-Z)"
-```
 
 ## What it produces
 
@@ -82,8 +81,10 @@ Proficiency Level, Score
 - `Score Detail 2` / `Reading Level` hold the same value, and so do
   `Score Detail 1` / `Proficiency Level`. That duplication is what the eduCLIMBER
   import format wants — it is not a bug.
-- `Score` comes from `educlimber_converter/data/Data_Table.csv`
-  (`Below A` → 1, `A` → 2, … `Z` → 27, `Z+` → 28, `MAX` → 29).
+- `Score` comes from the reading-level table (`Below A` → 1, `A` → 2, … `Z` → 27,
+  `Z+` → 28, `MAX` → 29). The table lives in `Sources/EduClimberKit/ReadingLevels.swift`;
+  `Resources/Data_Table.csv` is the same data as a reference file, and a unit test
+  fails if the two ever drift apart.
 
 Default file name: `Running_Records_<Window>_<SchoolYear>_educlimber.csv`, saved
 wherever you choose (the source folder is suggested). Written as plain UTF-8 with
@@ -94,54 +95,49 @@ no byte-order mark, so eduCLIMBER reads the first header cleanly.
 The conversion is all-or-nothing: if any row has a problem, **no file is written**
 and the app lists every offending row by its spreadsheet row number, so you can fix
 the source and re-run. Rows are flagged for an unrecognized or blank reading level,
-a blank Student ID, and a student name that isn't in `Last, First` form. An invalid school
-year stops the run before any row is read, and an unmatched column is asked about
-rather than failing. Completely
-blank rows are skipped rather than flagged.
+a blank Student ID, and a student name that isn't in `Last, First` form. An invalid
+school year stops the run before any row is read, and an unmatched column is asked
+about rather than failing. Completely blank rows are skipped rather than flagged —
+and on an Excel file, row numbers still count them, so they match what you see in
+Excel.
 
 School year must match `YYYY-YYYY` exactly — no spaces.
 
-## Building the executable
+## Project layout
 
-```bash
-pip install -r requirements-dev.txt
-pyinstaller educlimber_converter.spec      # -> dist/eduCLIMBER-Converter
 ```
-
-PyInstaller does not cross-compile: build on Windows for a `.exe`, on macOS for a
-Mac build. `Data_Table.csv` is bundled in, and the app finds it via `sys._MEIPASS`.
-
-## Tests
-
-```bash
-pip install -r requirements-dev.txt
-python -m pytest tests -q          # GUI tests skip without a display
-xvfb-run -a python -m pytest tests -q   # Linux: include the GUI tests
+Package.swift               open this in Xcode
+Sources/
+  EduClimberKit/            all the logic, no UI — this is what the tests cover
+    Table.swift             loaded spreadsheet + loose header matching
+    CSVReader.swift         RFC 4180 parsing, delimiter and encoding detection
+    XLSXReader.swift        .xlsx via ZipArchive + SimpleXML
+    ZipArchive.swift        minimal ZIP reader (Apple's Compression framework)
+    SimpleXML.swift         XMLParser helpers for the workbook parts
+    ColumnMapping.swift     match expected columns to real headers, rank suggestions
+    Converter.swift         PromptField / SourceColumn / AssessmentConverter
+    RunningRecordsConverter.swift   source columns, field mapping, prompts
+    ReadingLevels.swift     the Reading Level → Score table
+    CSVWriter.swift         the eduCLIMBER CSV
+    Pipeline.swift          read → match columns → map → save
+  EduClimberConverterApp/   AppKit UI
+    MainWindowController.swift   the main window, built from the converter
+    ColumnMatchSheet.swift       "which column is this?" sheet
+Tests/EduClimberKitTests/   XCTest suite (`swift test` or ⌘U)
+scripts/build_app.sh        builds and signs eduCLIMBER Converter.app
 ```
 
 ## Adding another assessment type
 
-The shell (file picking, prompts, validation display, CSV export) is
-assessment-agnostic; everything specific to Running Records lives in one module.
+The shell (file picking, prompts, column matching, validation display, CSV export)
+is assessment-agnostic. To add one: write a type conforming to `AssessmentConverter`
+with its own `prompts`, `sourceColumns`, `outputColumns` and `convert(...)`, then add
+it to the `converters` array in `MainWindowController`. It appears in the assessment
+menu with its own prompts, and its declared `sourceColumns` get the same
+auto-matching and "which column is this?" prompting for free.
 
-```
-educlimber_converter/
-  core/spec.py       PromptField / ConversionResult / the Converter protocol
-  core/tabular.py    read CSV+Excel, loose header matching, write CSV
-  core/mapping.py    match expected columns to real headers, rank suggestions
-  core/pipeline.py   read -> validate -> map -> save
-  converters/
-    running_records.py   source columns, lookup table, field mapping, prompts
-  gui/app.py         Tkinter window, built from whatever converters are registered
-  gui/column_dialog.py  "which column is this?" dialog for unmatched headers
-  cli.py             same pipeline, no GUI
-  data/Data_Table.csv
-```
+## History
 
-To add one: write a sibling module in `converters/` with `key`, `display_name`,
-`description`, `prompts`, `source_columns`, `output_columns`,
-`convert(table, answers, columns)` and `default_output_name(answers)`, then add it
-to `CONVERTERS` in `converters/__init__.py`. It shows up in the app's assessment
-dropdown with its own prompts, and its declared `source_columns` get the same
-auto-matching and "which column is this?" prompting for free — no changes to the
-GUI, pipeline, or export code.
+Earlier commits on this branch contain a Python/Tkinter implementation of the same
+converter, replaced by this native app. It is still in the git history if it is ever
+needed.

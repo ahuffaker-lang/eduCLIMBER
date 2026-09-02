@@ -1,9 +1,8 @@
-__pycache__/
-*.py[cod]
-.venv/
-venv/
+.build/
 build/
-dist/
-*.egg-info/
-.pytest_cache/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+.DS_Store
 *_educlimber.csv

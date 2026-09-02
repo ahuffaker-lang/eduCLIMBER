@@ -1,0 +1,45 @@
+name: macOS app
+
+# Compiles and tests the Swift app on a real Mac, then uploads a ready-to-run
+# eduCLIMBER Converter.app — so the app can be downloaded without installing
+# Xcode locally. Run it from the Actions tab, or on a push to a build branch.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "claude/**"
+      - main
+    paths-ignore:
+      - "**.md"
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: macos-14   # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Build the app bundle
+        run: ./scripts/build_app.sh
+
+      - name: Check the bundle
+        run: |
+          APP="build/eduCLIMBER Converter.app"
+          test -x "$APP/Contents/MacOS/eduCLIMBER-Converter"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"
+          codesign --verify --deep --strict "$APP"
+          lipo -archs "$APP/Contents/MacOS/eduCLIMBER-Converter"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eduCLIMBER-Converter-macos
+          path: build/eduCLIMBER-Converter-macos.zip
+          if-no-files-found: error

@@ -1,0 +1,408 @@
+import AppKit
+import EduClimberKit
+
+/// The main window: choose a file, answer the batch prompts, convert, save.
+///
+/// Nothing here is specific to Running Records -- the assessment popup, the
+/// prompt fields and the expected columns all come from the converter, so a
+/// second assessment type appears in this window as soon as it is registered.
+final class MainWindowController: NSWindowController, NSTextFieldDelegate {
+    private let converters: [AssessmentConverter] = [RunningRecordsConverter()]
+    private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
+
+    // Loaded file state. Column choices are remembered per file, so confirming a
+    // misspelled header once covers re-converting after changing a prompt.
+    private var sourceURL: URL?
+    private var table: Table?
+    private var mapping: ColumnMapping?
+    private var result: ConversionResult?
+
+    private let assessmentPopUp = NSPopUpButton()
+    private let summaryLabel = makeLabel("", secondary: true)
+    private let fileLabel = makeLabel("No file selected")
+    private let matchColumnsButton = NSButton()
+    private let promptStack = NSStackView()
+    private var promptControls: [String: NSControl] = [:]
+    private let statusTextView = NSTextView()
+    private let convertButton = NSButton()
+    private let saveButton = NSButton()
+
+    convenience init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false)
+        window.title = "eduCLIMBER Assessment Converter"
+        window.center()
+        window.setFrameAutosaveName("MainWindow")
+        self.init(window: window)
+        window.contentView = makeContentView()
+        window.registerForDraggedTypes([.fileURL])
+        renderPrompts()
+        setStatus(
+            "Choose a source export (.csv or .xlsx), fill in the batch settings, "
+            + "then click Convert.\n\nYou can also drag a file onto this window.")
+    }
+
+    // MARK: - Layout
+
+    private func makeContentView() -> NSView {
+        let root = DropView()
+        root.onDrop = { [weak self] url in self?.setSource(url) }
+        root.translatesAutoresizingMaskIntoConstraints = false
+
+        assessmentPopUp.addItems(withTitles: converters.map(\.displayName))
+        assessmentPopUp.target = self
+        assessmentPopUp.action = #selector(assessmentChanged)
+        summaryLabel.stringValue = converter.summary
+
+        let assessmentBox = makeBox(title: "Assessment", views: [assessmentPopUp, summaryLabel])
+
+        let chooseButton = NSButton(
+            title: "Choose File…", target: self, action: #selector(chooseFile))
+        chooseButton.bezelStyle = .rounded
+        matchColumnsButton.title = "Match Columns…"
+        matchColumnsButton.bezelStyle = .rounded
+        matchColumnsButton.target = self
+        matchColumnsButton.action = #selector(editColumns)
+        matchColumnsButton.isEnabled = false
+
+        let fileRow = NSStackView(views: [fileLabel, chooseButton, matchColumnsButton])
+        fileRow.orientation = .horizontal
+        fileRow.spacing = 8
+        fileLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let fileBox = makeBox(title: "Source File", views: [fileRow])
+
+        promptStack.orientation = .vertical
+        promptStack.alignment = .leading
+        promptStack.spacing = 8
+        let promptBox = makeBox(title: "Batch Settings", views: [promptStack])
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        statusTextView.isEditable = false
+        statusTextView.isSelectable = true
+        statusTextView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        statusTextView.autoresizingMask = [.width]
+        scrollView.documentView = statusTextView
+        let statusBox = makeBox(title: "Status", views: [scrollView])
+
+        convertButton.title = "Convert"
+        convertButton.bezelStyle = .rounded
+        convertButton.keyEquivalent = "\r"
+        convertButton.target = self
+        convertButton.action = #selector(convert)
+        saveButton.title = "Save CSV…"
+        saveButton.bezelStyle = .rounded
+        saveButton.target = self
+        saveButton.action = #selector(saveResult)
+        saveButton.isEnabled = false
+
+        let spacer = NSView()
+        let buttonRow = NSStackView(views: [spacer, saveButton, convertButton])
+        buttonRow.orientation = .horizontal
+        buttonRow.spacing = 8
+
+        let column = NSStackView(views: [assessmentBox, fileBox, promptBox, statusBox, buttonRow])
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 12
+        column.translatesAutoresizingMaskIntoConstraints = false
+        column.setHuggingPriority(.defaultLow, for: .horizontal)
+
+        root.addSubview(column)
+        NSLayoutConstraint.activate([
+            column.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            column.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+            column.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+            column.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+            assessmentBox.widthAnchor.constraint(equalTo: column.widthAnchor),
+            fileBox.widthAnchor.constraint(equalTo: column.widthAnchor),
+            promptBox.widthAnchor.constraint(equalTo: column.widthAnchor),
+            statusBox.widthAnchor.constraint(equalTo: column.widthAnchor),
+            buttonRow.widthAnchor.constraint(equalTo: column.widthAnchor),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 180),
+        ])
+        return root
+    }
+
+    private func makeBox(title: String, views: [NSView]) -> NSBox {
+        let box = NSBox()
+        box.title = title
+        box.titlePosition = .atTop
+        box.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        box.contentView = stack
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
+        ])
+        for view in views {
+            view.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true
+        }
+        return box
+    }
+
+    /// Build the batch-settings controls from whatever the converter declares.
+    private func renderPrompts() {
+        for view in promptStack.arrangedSubviews {
+            promptStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        promptControls = [:]
+
+        for prompt in converter.prompts {
+            let label = makeLabel("\(prompt.label):")
+            label.widthAnchor.constraint(equalToConstant: 150).isActive = true
+            let control: NSControl
+            switch prompt.kind {
+            case .choice(let options):
+                let popUp = NSPopUpButton()
+                popUp.addItems(withTitles: options)
+                popUp.target = self
+                popUp.action = #selector(promptChanged)
+                control = popUp
+            case .text:
+                let field = NSTextField()
+                field.placeholderString = prompt.placeholder
+                field.delegate = self
+                field.widthAnchor.constraint(equalToConstant: 160).isActive = true
+                control = field
+            }
+            promptControls[prompt.key] = control
+
+            let hint = makeLabel(prompt.help.isEmpty ? prompt.placeholder : prompt.help,
+                                 secondary: true)
+            let row = NSStackView(views: [label, control, hint])
+            row.orientation = .horizontal
+            row.spacing = 8
+            promptStack.addArrangedSubview(row)
+        }
+    }
+
+    private func answers() -> [String: String] {
+        var values: [String: String] = [:]
+        for prompt in converter.prompts {
+            guard let control = promptControls[prompt.key] else { continue }
+            if let popUp = control as? NSPopUpButton {
+                values[prompt.key] = popUp.titleOfSelectedItem ?? ""
+            } else if let field = control as? NSTextField {
+                values[prompt.key] = field.stringValue.trimmingCharacters(
+                    in: .whitespacesAndNewlines)
+            }
+        }
+        return values
+    }
+
+    // MARK: - Actions
+
+    @objc private func assessmentChanged() {
+        summaryLabel.stringValue = converter.summary
+        mapping = nil  // a different assessment expects different columns
+        renderPrompts()
+        invalidateResult()
+    }
+
+    @objc private func promptChanged() { invalidateResult() }
+
+    func controlTextDidChange(_ notification: Notification) { invalidateResult() }
+
+    @objc private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Select the assessment export"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedFileTypes = ["csv", "xlsx", "xlsm", "txt", "tsv"]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setSource(url)
+    }
+
+    func setSource(_ url: URL) {
+        sourceURL = url
+        fileLabel.stringValue = url.path
+        table = nil
+        mapping = nil
+        matchColumnsButton.isEnabled = false
+        invalidateResult()
+        setStatus("Selected: \(url.lastPathComponent)\nClick Convert when ready.")
+    }
+
+    /// Read the file and auto-match its columns. False if it could not be read.
+    @discardableResult
+    private func load() -> Bool {
+        if table != nil && mapping != nil { return true }
+        guard let sourceURL else { return false }
+        do {
+            let loaded = try Pipeline.loadSource(at: sourceURL)
+            table = loaded
+            mapping = Pipeline.matchColumns(converter: converter, table: loaded)
+            matchColumnsButton.isEnabled = true
+            return true
+        } catch {
+            let message = error.localizedDescription
+            setStatus("Could not read this file.\n\n\(message)")
+            showAlert(message, style: .warning)
+            return false
+        }
+    }
+
+    /// Let the user review or fix which file column feeds each expected column.
+    @objc @discardableResult private func editColumns() -> Bool {
+        guard sourceURL != nil, load(), let current = mapping, let window else { return false }
+        var updated = current
+        let accepted = ColumnMatchSheet.run(
+            over: window, mapping: &updated,
+            fileName: sourceURL?.lastPathComponent ?? "")
+        if accepted {
+            mapping = updated
+            invalidateResult()
+            let lines = updated.matches.map { "  " + $0.describe }.joined(separator: "\n")
+            setStatus("Column matching set:\n\(lines)\n\nClick Convert when ready.")
+        }
+        return accepted
+    }
+
+    @objc private func convert() {
+        guard sourceURL != nil else {
+            showAlert("Choose a source file first.", style: .informational)
+            return
+        }
+        let answers = answers()
+        let problems = Pipeline.validateAnswers(converter: converter, answers: answers)
+        guard problems.isEmpty else {
+            showAlert(problems.joined(separator: "\n"), style: .warning)
+            return
+        }
+
+        invalidateResult()
+        guard load(), let table, var mapping else { return }
+
+        // A misspelled or renamed header is a question, not a failure: ask which
+        // column to use, pre-selecting the closest header in the file.
+        if mapping.needsConfirmation {
+            guard editColumns(), let confirmed = self.mapping else {
+                let pending = mapping.unsettled
+                    .map { "  " + $0.column.label }
+                    .joined(separator: "\n")
+                setStatus(
+                    "Conversion cancelled — the columns below still need to be matched:\n"
+                    + pending + "\n\nClick 'Match Columns…' to pick them.")
+                return
+            }
+            mapping = confirmed
+        }
+
+        do {
+            let converted = try Pipeline.convert(
+                converter: converter, table: table, answers: answers, mapping: mapping)
+            if !converted.errors.isEmpty {
+                let name = sourceURL?.lastPathComponent ?? "this file"
+                setStatus(
+                    "\(converted.errors.count) problem(s) found in \(name) — "
+                    + "nothing was exported.\nFix the source file and convert again:\n\n"
+                    + Pipeline.formatErrors(converted.errors))
+                showAlert(
+                    "\(converted.errors.count) row problem(s) found. No file was written — "
+                    + "see the status area for the full list.",
+                    style: .warning)
+                return
+            }
+            result = converted
+            saveButton.isEnabled = true
+            setStatus(
+                "Ready: \(converted.rows.count) student row(s) converted from "
+                + "\(sourceURL?.lastPathComponent ?? "").")
+            saveResult()
+        } catch {
+            setStatus("Could not convert this file.\n\n\(error.localizedDescription)")
+            showAlert(error.localizedDescription, style: .warning)
+        }
+    }
+
+    @objc private func saveResult() {
+        guard let result else { return }
+        let suggested = Pipeline.suggestedOutputURL(
+            converter: converter, sourceURL: sourceURL, answers: answers())
+
+        let panel = NSSavePanel()
+        panel.title = "Save eduCLIMBER CSV"
+        panel.nameFieldStringValue = suggested.lastPathComponent
+        panel.directoryURL = suggested.deletingLastPathComponent()
+        panel.allowedFileTypes = ["csv"]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try Pipeline.save(result: result, to: url)
+            let message = "Converted \(result.rows.count) students — saved to\n\(url.path)"
+            setStatus(message)
+            showAlert(message, style: .informational)
+        } catch {
+            showAlert("Could not save the file:\n\(error.localizedDescription)", style: .warning)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func invalidateResult() {
+        result = nil
+        saveButton.isEnabled = false
+    }
+
+    private func setStatus(_ text: String) {
+        statusTextView.string = text
+    }
+
+    private func showAlert(_ message: String, style: NSAlert.Style) {
+        let alert = NSAlert()
+        alert.messageText = "eduCLIMBER Assessment Converter"
+        alert.informativeText = message
+        alert.alertStyle = style
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: nil)
+        } else {
+            alert.runModal()
+        }
+    }
+}
+
+func makeLabel(_ text: String, secondary: Bool = false) -> NSTextField {
+    let label = NSTextField(labelWithString: text)
+    label.lineBreakMode = .byWordWrapping
+    label.maximumNumberOfLines = 3
+    if secondary {
+        label.textColor = .secondaryLabelColor
+        label.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    }
+    return label
+}
+
+/// The window's content view, so a file can be dropped anywhere on it.
+final class DropView: NSView {
+    var onDrop: ((URL) -> Void)?
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedURL(sender) == nil ? [] : .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let url = droppedURL(sender) else { return false }
+        onDrop?(url)
+        return true
+    }
+
+    private func droppedURL(_ sender: NSDraggingInfo) -> URL? {
+        guard let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self], options: nil) as? [URL] else { return nil }
+        return urls.first
+    }
+}
