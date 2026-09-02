@@ -15,7 +15,10 @@ public enum SpreadsheetMLReader {
         let collector = Collector()
         let parser = XMLParser(data: data)
         parser.delegate = collector
-        guard parser.parse(), !collector.grid.isEmpty else {
+        guard parser.parse() else {
+            throw SourceFileError.malformedTable("the XML could not be parsed")
+        }
+        guard !collector.grid.isEmpty else {
             throw SourceFileError.malformedTable("no rows were found in this XML spreadsheet")
         }
         return try makeTable(fromGrid: collector.grid)
@@ -37,6 +40,7 @@ private final class Collector: NSObject, XMLParserDelegate {
         qualifiedName: String?,
         attributes: [String: String] = [:]
     ) {
+        guard !finishedFirstTable else { return }
         switch local(elementName, qualifiedName) {
         case "row":
             row = []
@@ -57,7 +61,7 @@ private final class Collector: NSObject, XMLParserDelegate {
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        if insideData { value += string }
+        if insideData, !finishedFirstTable { value += string }
     }
 
     func parser(
@@ -66,6 +70,7 @@ private final class Collector: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName: String?
     ) {
+        guard !finishedFirstTable else { return }
         switch local(elementName, qualifiedName) {
         case "data":
             insideData = false
@@ -80,8 +85,10 @@ private final class Collector: NSObject, XMLParserDelegate {
             grid.append(row)
             row = []
         case "table":
-            finishedFirstTable = true  // only the first worksheet is read
-            if finishedFirstTable { parser.abortParsing() }
+            // Only the first worksheet is read. Later ones are ignored by the
+            // guards above rather than by abortParsing(), which would make
+            // parse() report failure for a file that read perfectly well.
+            finishedFirstTable = true
         default:
             break
         }

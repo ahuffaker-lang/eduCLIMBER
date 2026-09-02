@@ -100,14 +100,15 @@ final class SpreadsheetReadingTests: XCTestCase {
             "decompressed sheet XML should be readable")
     }
 
-    func testUnsupportedAndLegacyTypes() {
-        let xls = URL(fileURLWithPath: "/tmp/export.xls")
-        XCTAssertThrowsError(try Pipeline.loadSource(at: xls)) { error in
-            XCTAssertEqual(error as? SourceFileError, .legacyExcel)
-        }
-        let pdf = URL(fileURLWithPath: "/tmp/export.pdf")
-        XCTAssertThrowsError(try Pipeline.loadSource(at: pdf)) { error in
-            XCTAssertEqual(error as? SourceFileError, .unsupportedType("pdf"))
+    /// The file has to exist to be sniffed -- an extension alone decides nothing
+    /// now, so a missing file reports exactly that. What each real format does is
+    /// covered in ExcelFormatTests.
+    func testMissingFileIsReportedAsUnreadable() {
+        let missing = URL(fileURLWithPath: "/tmp/does-not-exist-\(UUID().uuidString).xls")
+        XCTAssertThrowsError(try Pipeline.loadSource(at: missing)) { error in
+            guard case .unreadable = (error as? SourceFileError) else {
+                return XCTFail("expected .unreadable, got \(error)")
+            }
         }
     }
 }
