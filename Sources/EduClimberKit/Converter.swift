@@ -93,6 +93,44 @@ public struct ConversionResult {
     }
 
     public var isClean: Bool { errors.isEmpty }
+
+    /// Rows that converted and can be exported.
+    public var hasUsableRows: Bool { !rows.isEmpty }
+
+    /// Problems grouped by spreadsheet row, in the order they appear in the
+    /// file. One row can fail for several reasons (a blank ID *and* a blank
+    /// reading level), and the review window lists a row once, not twice.
+    public var issues: [RowIssue] {
+        var order: [Int] = []
+        var problemsByRow: [Int: [String]] = [:]
+        for error in errors {
+            if problemsByRow[error.rowNumber] == nil { order.append(error.rowNumber) }
+            problemsByRow[error.rowNumber, default: []].append(error.message)
+        }
+        return order.map { RowIssue(rowNumber: $0, problems: problemsByRow[$0] ?? []) }
+    }
+
+    /// How many rows would be left out if the user chooses to skip them.
+    public var skippedRowCount: Int { issues.count }
+
+    /// The issue list as text, for copying out or pasting into an email.
+    public func issuesReport() -> String {
+        issues.map(\.description).joined(separator: "\n")
+    }
+}
+
+/// Everything wrong with one row of the source file.
+public struct RowIssue: Equatable {
+    public let rowNumber: Int
+    public let problems: [String]
+
+    public init(rowNumber: Int, problems: [String]) {
+        self.rowNumber = rowNumber
+        self.problems = problems
+    }
+
+    public var summary: String { problems.joined(separator: " ") }
+    public var description: String { "Row \(rowNumber): \(summary)" }
 }
 
 /// What every assessment converter provides.

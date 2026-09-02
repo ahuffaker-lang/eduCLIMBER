@@ -322,23 +322,34 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         do {
             let converted = try Pipeline.convert(
                 converter: converter, table: table, answers: answers, mapping: mapping)
+            let name = sourceURL?.lastPathComponent ?? "this file"
             if !converted.errors.isEmpty {
-                let name = sourceURL?.lastPathComponent ?? "this file"
+                // Blank and half-filled rows are normal in a real export. Show
+                // what is wrong and let the user skip those rows rather than
+                // throwing away a conversion that is otherwise fine.
                 setStatus(
-                    "\(converted.errors.count) problem(s) found in \(name) — "
-                    + "nothing was exported.\nFix the source file and convert again:\n\n"
-                    + Pipeline.formatErrors(converted.errors))
-                showAlert(
-                    "\(converted.errors.count) row problem(s) found. No file was written — "
-                    + "see the status area for the full list.",
-                    style: .warning)
-                return
+                    "\(converted.rows.count) row(s) ready, "
+                    + "\(converted.skippedRowCount) row(s) with problems in \(name):\n\n"
+                    + converted.issuesReport())
+                guard let window else { return }
+                let decision = ReviewIssuesSheet.run(
+                    over: window, result: converted, fileName: name)
+                guard decision == .skipAndContinue, converted.hasUsableRows else {
+                    setStatus(
+                        "Conversion cancelled — nothing was exported.\n"
+                        + "\(converted.skippedRowCount) row(s) need fixing in \(name):\n\n"
+                        + converted.issuesReport())
+                    return
+                }
             }
             result = converted
             saveButton.isEnabled = true
+            let skippedNote = converted.skippedRowCount == 0
+                ? ""
+                : " (\(converted.skippedRowCount) row(s) skipped)"
             setStatus(
                 "Ready: \(converted.rows.count) student row(s) converted from "
-                + "\(sourceURL?.lastPathComponent ?? "").")
+                + "\(name)\(skippedNote).")
             saveResult()
         } catch {
             setStatus("Could not convert this file.\n\n\(error.localizedDescription)")
@@ -360,7 +371,11 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
 
         do {
             try Pipeline.save(result: result, to: url)
-            let message = "Converted \(result.rows.count) students — saved to\n\(url.path)"
+            var message = "Converted \(result.rows.count) students — saved to\n\(url.path)"
+            if result.skippedRowCount > 0 {
+                message += "\n\n\(result.skippedRowCount) row(s) with problems were skipped "
+                    + "and are not in the file."
+            }
             setStatus(message)
             showAlert(message, style: .informational)
         } catch {

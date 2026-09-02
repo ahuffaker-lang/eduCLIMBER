@@ -217,3 +217,73 @@ final class RunningRecordsTests: XCTestCase {
             "Running_Records_Trimester2_2026-2027_educlimber.csv")
     }
 }
+
+// MARK: - Reviewing and skipping suspect rows
+
+extension RunningRecordsTests {
+    /// A file with problems still converts its good rows; the bad ones are
+    /// reported so the app can offer to skip them.
+    func testGoodRowsSurviveAlongsideProblemRows() throws {
+        let url = try writeCSV(
+            """
+            "Ng, Ada",9,K,A,At Standard
+            "Ray, Jo",10,1,QQ,At Standard
+            "Lee, Sam",11,2,C,At Standard
+            ,,,,\u{20}
+            "Doe, Pat",,3,D,At Standard
+            """ + "\n")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers)
+
+        XCTAssertEqual(result.rows.count, 2, "Ada and Sam convert")
+        XCTAssertTrue(result.hasUsableRows)
+        XCTAssertEqual(result.skippedRowCount, 2, "Jo and Pat are skipped")
+        XCTAssertEqual(result.issues.map(\.rowNumber), [3, 6])
+    }
+
+    /// One row failing for two reasons is listed once, with both reasons.
+    func testAllProblemsForARowAreGroupedTogether() throws {
+        let url = try writeCSV("\"Ray, Jo\",,1,QQ,At Standard\n")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers)
+
+        XCTAssertEqual(result.errors.count, 2)
+        XCTAssertEqual(result.issues.count, 1)
+        let issue = try XCTUnwrap(result.issues.first)
+        XCTAssertEqual(issue.rowNumber, 2)
+        XCTAssertEqual(issue.problems.count, 2)
+        XCTAssertTrue(issue.summary.contains("Student ID is blank"), issue.summary)
+        XCTAssertTrue(issue.summary.contains("reading level table"), issue.summary)
+    }
+
+    func testNothingUsableIsReportedAsSuch() throws {
+        let url = try writeCSV("\"Ray, Jo\",10,1,QQ,At Standard\n")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers)
+        XCTAssertFalse(result.hasUsableRows)
+        XCTAssertEqual(result.skippedRowCount, 1)
+    }
+
+    func testIssuesReportIsCopyableText() throws {
+        let url = try writeCSV("\"Ng, Ada\",9,K,A,At\n\"Ray, Jo\",10,1,QQ,At Standard\n")
+        let report = try Pipeline
+            .convertFile(converter: converter, url: url, answers: answers)
+            .issuesReport()
+        XCTAssertTrue(report.hasPrefix("Row 3:"), report)
+        XCTAssertTrue(report.contains("Ray, Jo"), report)
+    }
+
+    /// Skipping rows must not disturb the exported file: it holds exactly the
+    /// good rows, in order, with the full column set.
+    func testExportAfterSkippingHoldsOnlyGoodRows() throws {
+        let url = try writeCSV(
+            "\"Ng, Ada\",9,K,A,At Standard\n\"Ray, Jo\",10,1,QQ,At Standard\n"
+            + "\"Lee, Sam\",11,2,C,At Standard\n")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers)
+        let out = url.deletingLastPathComponent().appendingPathComponent("skipped.csv")
+        try Pipeline.save(result: result, to: out)
+
+        let rows = CSVReader.parse(try String(contentsOf: out, encoding: .utf8))
+        XCTAssertEqual(rows[0], converter.outputColumns)
+        XCTAssertEqual(rows.count, 3, "header plus the two good rows")
+        XCTAssertEqual(rows[1][7], "Ng")
+        XCTAssertEqual(rows[2][7], "Lee")
+    }
+}

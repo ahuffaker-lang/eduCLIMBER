@@ -137,13 +137,25 @@ no byte-order mark, so eduCLIMBER reads the first header cleanly.
 
 ## Validation
 
-The conversion is all-or-nothing: if any row has a problem, **no file is written**
-and the app lists every offending row by its spreadsheet row number, so you can fix
-the source and re-run. Rows are flagged for an unrecognized or blank reading level,
-a blank Student ID, a blank first or last name, and a combined student name that
-isn't in `Last, First` form. An invalid
-school year stops the run before any row is read, and an unmatched column is asked
-about rather than failing. Completely blank rows are skipped rather than flagged —
+Rows are flagged for an unrecognized or blank reading level, a blank Student ID, a
+blank first or last name, and a combined student name that isn't in `Last, First`
+form.
+
+When something is wrong, a **review window** lists every affected row by its
+spreadsheet row number — the number you see in Excel — with all of that row's
+problems on one line. From there you can:
+
+- **Skip those rows and continue**, exporting the rows that are fine. The saved
+  file contains only the good rows, and the confirmation says how many were
+  skipped.
+- **Cancel**, fix the source file, and convert again.
+- **Copy List**, to paste the issues into an email or work through them in the
+  spreadsheet.
+
+If *no* row could be converted there is nothing to export, and the window says so
+rather than offering to continue. An invalid school year stops the run before any row is
+read, and an unmatched column is asked about rather than failing. Completely blank
+rows are skipped silently rather than listed —
 and on an Excel file, row numbers still count them, so they match what you see in
 Excel.
 
