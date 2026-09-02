@@ -8,6 +8,7 @@ public enum SourceFileError: LocalizedError, Equatable {
     case legacyExcel
     case malformedExcel(String)
     case malformedTable(String)
+    case encryptedWorkbook
 
     public var errorDescription: String? {
         switch self {
@@ -19,6 +20,9 @@ public enum SourceFileError: LocalizedError, Equatable {
             let named = ext.isEmpty ? "This file" : "A '.\(ext)' file"
             return "\(named) is not a spreadsheet this app can read. "
                 + "Export the assessment data as Excel (.xlsx) or CSV and try again."
+        case .encryptedWorkbook:
+            return "This workbook is password-protected, so its contents cannot be read.\n"
+                + "Open it in Excel, remove the password, and save it again."
         case .legacyExcel:
             return "This is an Excel 97-2003 workbook (the old binary .xls format), "
                 + "which this app cannot read.\nOpen it in Excel and choose "

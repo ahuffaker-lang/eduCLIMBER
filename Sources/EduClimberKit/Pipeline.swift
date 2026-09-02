@@ -25,7 +25,7 @@ public enum Pipeline {
         case .delimitedText:
             return try CSVReader.read(contentsOf: url)
         case .legacyExcel:
-            throw SourceFileError.legacyExcel
+            return try XLSReader.read(contentsOf: url)
         case .pdf:
             throw SourceFileError.unsupportedType("pdf")
         case .unknown(let ext):

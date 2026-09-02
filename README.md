@@ -61,13 +61,14 @@ The app works out what a file is from its contents, not its name, because
 assessment systems label exports loosely. All of these open:
 
 - a real `.xlsx` / `.xlsm` workbook — including one renamed to `.xls`
+- an **Excel 97-2003 binary `.xls`** (the old format many systems still export)
 - an HTML table saved with an `.xls` name (a very common web export)
 - an Excel 2003 XML Spreadsheet, also usually named `.xls`
 - CSV, TSV, or any delimited text, with any extension or none at all
 
-The one exception is the **Excel 97-2003 binary** format (a true old-style
-`.xls`). If you have one, the app says so and tells you the fix: open it in
-Excel and use **File > Save As > Excel Workbook (.xlsx)** or **CSV**.
+No re-saving required. A password-protected workbook is the one thing that
+cannot be read, and the app says so: remove the password in Excel and save it
+again.
 
 The file picker does not grey anything out — if a file can be read, you can
 select it, and anything unreadable is explained when you open it.
