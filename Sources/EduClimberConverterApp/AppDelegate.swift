@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMenu()
+        applyIconWhenRunningUnbundled()
         let controller = MainWindowController()
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
@@ -14,6 +15,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// A packaged .app takes its icon from Info.plist. Run straight from Xcode
+    /// there is no bundle to read, so point the Dock at the icon in the repo.
+    private func applyIconWhenRunningUnbundled() {
+        guard Bundle.main.infoDictionary?["CFBundleIconFile"] == nil else { return }
+        let sourceRoot = URL(fileURLWithPath: #filePath)  // Sources/<target>/AppDelegate.swift
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let candidates = [
+            Bundle.main.bundleURL.appendingPathComponent("AppIcon.icns"),
+            sourceRoot.appendingPathComponent("Resources/AppIcon.icns"),
+        ]
+        for url in candidates where FileManager.default.fileExists(atPath: url.path) {
+            if let icon = NSImage(contentsOf: url) {
+                NSApp.applicationIconImage = icon
+                return
+            }
+        }
     }
 
     /// The minimum menu bar a Mac app is expected to have: Quit, and the edit

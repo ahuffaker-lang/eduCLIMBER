@@ -37,6 +37,15 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist"
           codesign --verify --deep --strict "$APP"
           lipo -archs "$APP/Contents/MacOS/eduCLIMBER-Converter"
+          # The icon has to be a real .icns macOS can decode, not just a file
+          # of the right name: unpacking it proves the generated container is
+          # valid and carries every size.
+          test -f "$APP/Contents/Resources/AppIcon.icns"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$APP/Contents/Info.plist"
+          iconutil --convert iconset --output /tmp/AppIcon.iconset \
+            "$APP/Contents/Resources/AppIcon.icns"
+          ls /tmp/AppIcon.iconset
+          sips -g pixelWidth -g pixelHeight /tmp/AppIcon.iconset/icon_512x512@2x.png
 
       - uses: actions/upload-artifact@v4
         with:
