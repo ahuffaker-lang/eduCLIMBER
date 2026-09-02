@@ -26,6 +26,13 @@ final class SpreadsheetReadingTests: XCTestCase {
         XCTAssertEqual(CSVReader.parse("a,b\r1,2"), [["a", "b"], ["1", "2"]])
     }
 
+    func testQuotedFieldFollowedByCRLF() {
+        // The closing quote is followed by the CRLF grapheme, which must still
+        // end the row rather than land inside the next field.
+        XCTAssertEqual(
+            CSVReader.parse("\"a\",\"b\"\r\n\"c\",\"d\"\r\n"), [["a", "b"], ["c", "d"]])
+    }
+
     func testEmbeddedNewlineInsideQuotes() {
         XCTAssertEqual(CSVReader.parse("a,\"line1\nline2\"\n"), [["a", "line1\nline2"]])
     }

@@ -97,11 +97,9 @@ public enum CSVReader {
                 inQuotes = true
             case delimiter:
                 endField()
-            case "\r":
-                // Swallow the \n of a \r\n pair.
-                if let next = iterator.next(), next != "\n" { pending = next }
-                endRow()
-            case "\n":
+            // Swift treats CRLF as one Character (a single grapheme cluster), so
+            // Windows line endings must be matched as "\r\n", not as "\r" then "\n".
+            case "\r\n", "\r", "\n":
                 endRow()
             default:
                 field.append(character)
