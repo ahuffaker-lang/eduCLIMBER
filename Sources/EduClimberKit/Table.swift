@@ -7,19 +7,25 @@ import Foundation
 public struct Table {
     public var headers: [String]
     public var rows: [[String: String]]
-    /// 1-based spreadsheet row number of the first data row (the header is row 1
-    /// unless the export starts with blank padding rows).
-    public var firstDataRowNumber: Int
+    /// The 1-based spreadsheet row number of each data row, as shown in Excel.
+    /// Kept per row rather than derived from the index: blank rows are dropped
+    /// from `rows`, so counting would make every later error point one row short.
+    public var rowNumbers: [Int]
 
-    public init(headers: [String], rows: [[String: String]], firstDataRowNumber: Int = 2) {
+    public init(headers: [String], rows: [[String: String]], rowNumbers: [Int] = []) {
         self.headers = headers
         self.rows = rows
-        self.firstDataRowNumber = firstDataRowNumber
+        self.rowNumbers = rowNumbers.isEmpty
+            ? Array(2..<(2 + rows.count))
+            : rowNumbers
     }
+
+    /// 1-based spreadsheet row number of the first data row.
+    public var firstDataRowNumber: Int { rowNumbers.first ?? 2 }
 
     /// The spreadsheet row number of the data row at `index`, for error messages.
     public func rowNumber(_ index: Int) -> Int {
-        firstDataRowNumber + index
+        rowNumbers.indices.contains(index) ? rowNumbers[index] : index + 2
     }
 
     /// The real header matching any of `candidates`, or nil.
@@ -67,16 +73,18 @@ public func makeTable(fromGrid grid: [[String]]) throws -> Table {
 
     let headers = deduplicate(grid[headerIndex].map { $0.trimmingCharacters(in: .whitespaces) })
     var rows: [[String: String]] = []
-    for raw in grid[(headerIndex + 1)...] {
-        let values = raw.map { $0.trimmingCharacters(in: .whitespaces) }
+    var rowNumbers: [Int] = []
+    for index in (headerIndex + 1)..<grid.count {
+        let values = grid[index].map { $0.trimmingCharacters(in: .whitespaces) }
         if values.allSatisfy({ $0.isEmpty }) { continue }
         var row: [String: String] = [:]
         for (position, header) in headers.enumerated() {
             row[header] = position < values.count ? values[position] : ""
         }
         rows.append(row)
+        rowNumbers.append(index + 1)  // grid index 0 is spreadsheet row 1
     }
-    return Table(headers: headers, rows: rows, firstDataRowNumber: headerIndex + 2)
+    return Table(headers: headers, rows: rows, rowNumbers: rowNumbers)
 }
 
 /// Give every column a unique, non-empty name.

@@ -155,6 +155,16 @@ final class RunningRecordsTests: XCTestCase {
         XCTAssertEqual(result.rows.count, 2)
     }
 
+    /// A skipped blank row must not shift the row numbers reported for the rows
+    /// after it -- they have to match what the user sees in the spreadsheet.
+    func testBlankRowsDoNotShiftReportedRowNumbers() throws {
+        let url = try writeCSV(
+            "\"Ng, Ada\",9,K,A,At Standard\n,,,,\n\"Ray, Jo\",10,1,QQ,At Standard\n")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers)
+        XCTAssertEqual(result.errors.count, 1)
+        XCTAssertEqual(result.errors.first?.rowNumber, 4)
+    }
+
     func testSchoolYearValidation() {
         for year in ["2026-2027", "2025-2026"] {
             let problems = Pipeline.validateAnswers(
