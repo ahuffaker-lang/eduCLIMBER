@@ -126,14 +126,22 @@ public func resolveColumns(table: Table, columns: [SourceColumn]) -> ColumnMappi
 }
 
 /// The file's headers, most likely first, for one expected column.
+///
+/// Written as a loop rather than a map/filter/sort chain: the chained version is
+/// more than the Swift type-checker will solve in reasonable time.
 public func rankHeaders(for column: SourceColumn, headers: [String]) -> [String] {
-    headers
-        .map { (header: $0, score: similarity(column: column, header: $0)) }
-        .filter { $0.score >= suggestionFloor }
-        .sorted { left, right in
-            left.score == right.score ? left.header < right.header : left.score > right.score
+    var scored: [(header: String, score: Double)] = []
+    for header in headers {
+        let score = similarity(column: column, header: header)
+        if score >= suggestionFloor {
+            scored.append((header: header, score: score))
         }
-        .map(\.header)
+    }
+    scored.sort { left, right in
+        if left.score == right.score { return left.header < right.header }
+        return left.score > right.score
+    }
+    return scored.map { $0.header }
 }
 
 /// How much `header` looks like any of the names `column` answers to.

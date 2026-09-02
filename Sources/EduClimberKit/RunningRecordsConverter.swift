@@ -132,7 +132,9 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 continue
             }
 
-            result.rows.append([
+            // Annotated so the type-checker does not have to solve a 15-entry
+            // literal from context.
+            let output: [String: String] = [
                 "Assessment Group": Self.assessmentGroup,
                 "Assessment Name": Self.assessmentName,
                 "Assessment Window": window,
@@ -151,7 +153,8 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 "Score Detail 1": proficiency,
                 "Proficiency Level": proficiency,
                 "Score": String(score),
-            ])
+            ]
+            result.rows.append(output)
         }
         return result
     }
