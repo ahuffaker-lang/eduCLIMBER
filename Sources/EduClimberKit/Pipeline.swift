@@ -9,17 +9,27 @@ public enum Pipeline {
         converter.prompts.compactMap { $0.validate(answers[$0.key]) }
     }
 
-    /// Read a CSV or Excel file.
+    /// Read a spreadsheet, whatever the export was named.
+    ///
+    /// The format is decided by the file's content, not its extension: systems
+    /// hand out HTML tables and XML spreadsheets named `.xls`, and CSVs with no
+    /// extension at all.
     public static func loadSource(at url: URL) throws -> Table {
-        switch url.pathExtension.lowercased() {
-        case "xlsx", "xlsm", "xltx", "xltm":
+        switch try SourceFormat.detect(at: url) {
+        case .xlsx:
             return try XLSXReader.read(contentsOf: url)
-        case "csv", "txt", "tsv", "":
+        case .spreadsheetML:
+            return try SpreadsheetMLReader.read(contentsOf: url)
+        case .htmlTable:
+            return try HTMLTableReader.read(contentsOf: url)
+        case .delimitedText:
             return try CSVReader.read(contentsOf: url)
-        case "xls":
+        case .legacyExcel:
             throw SourceFileError.legacyExcel
-        case let other:
-            throw SourceFileError.unsupportedType(other)
+        case .pdf:
+            throw SourceFileError.unsupportedType("pdf")
+        case .unknown(let ext):
+            throw SourceFileError.unsupportedType(ext)
         }
     }
 

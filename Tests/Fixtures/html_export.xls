@@ -1,0 +1,10 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office">
+<head><meta charset="utf-8"><title>Running Records Export</title></head>
+<body>
+<table border=1>
+<tr><th>First Name</th><th>Last Name</th><th>Student ID</th><th>Grade Level</th><th>Reading Level (A-Z)</th><th>Proficiency Level</th></tr>
+<tr><td>Maria</td><td>Gomez</td><td>100234</td><td>K</td><td>Below&nbsp;A</td><td>Far Below Standard</td></tr>
+<tr><td>Anna&nbsp;Lee</td><td>Van&nbsp;Dyke</td><td>100237</td><td>3</td><td>M</td><td>At Standard</td></tr>
+<tr><td>Jos&#233;</td><td>O&#39;Brien</td><td>100238</td><td>2</td><td>J</td><td>At Standard</td></tr>
+</table>
+</body></html>

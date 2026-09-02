@@ -1,4 +1,6 @@
 import AppKit
+import UniformTypeIdentifiers
+
 import EduClimberKit
 
 /// The main window: choose a file, answer the batch prompts, convert, save.
@@ -222,10 +224,24 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         panel.title = "Select the assessment export"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.allowedFileTypes = ["csv", "xlsx", "xlsm", "txt", "tsv"]
+        // Deliberately permissive. Exports arrive named .xls when they are
+        // really HTML or XML, and sometimes with no extension at all; a picker
+        // that greys those out just blocks the user on a file the app can
+        // actually read. Anything genuinely unreadable is reported on open.
+        panel.allowedContentTypes = Self.openableTypes
+        panel.allowsOtherFileTypes = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         setSource(url)
     }
+
+    /// Spreadsheet-ish types listed first, plus `data` so nothing is greyed out.
+    private static let openableTypes: [UTType] = {
+        let names = ["xlsx", "xlsm", "xls", "csv", "tsv", "txt", "xml", "html", "htm"]
+        var types = names.compactMap { UTType(filenameExtension: $0) }
+        types.append(contentsOf: [.spreadsheet, .commaSeparatedText, .plainText, .data])
+        var seen = Set<String>()
+        return types.filter { seen.insert($0.identifier).inserted }
+    }()
 
     func setSource(_ url: URL) {
         sourceURL = url

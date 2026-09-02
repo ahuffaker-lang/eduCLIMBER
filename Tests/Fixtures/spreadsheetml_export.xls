@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="Export"><Table>
+<Row><Cell><Data ss:Type="String">First Name</Data></Cell><Cell><Data ss:Type="String">Last Name</Data></Cell><Cell><Data ss:Type="String">Student ID</Data></Cell><Cell><Data ss:Type="String">Grade Level</Data></Cell><Cell><Data ss:Type="String">Reading Level (A-Z)</Data></Cell><Cell><Data ss:Type="String">Proficiency Level</Data></Cell></Row>
+<Row><Cell><Data ss:Type="String">Maria</Data></Cell><Cell><Data ss:Type="String">Gomez</Data></Cell><Cell><Data ss:Type="Number">100234</Data></Cell><Cell><Data ss:Type="String">K</Data></Cell><Cell><Data ss:Type="String">Below A</Data></Cell><Cell><Data ss:Type="String">Far Below Standard</Data></Cell></Row>
+<Row><Cell><Data ss:Type="String">Chidi</Data></Cell><Cell><Data ss:Type="String">Okafor</Data></Cell><Cell><Data ss:Type="Number">100236</Data></Cell><Cell><Data ss:Type="Number">2</Data></Cell><Cell ss:Index="5"><Data ss:Type="String">J</Data></Cell><Cell><Data ss:Type="String">At Standard</Data></Cell></Row>
+</Table></Worksheet></Workbook>

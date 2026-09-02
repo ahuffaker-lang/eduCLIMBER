@@ -43,9 +43,9 @@ shapes and colours are all in one function.
 
 ## Source file
 
-CSV or Excel (`.xlsx`), with these columns. Header text is matched
-case-insensitively and ignoring punctuation and spacing, so `reading_level` or
-`READING LEVEL (A-Z)` are fine:
+CSV or Excel, with these columns. Header text is matched case-insensitively and
+ignoring punctuation and spacing, so `reading_level` or `READING LEVEL (A-Z)`
+are fine:
 
 | Column | Notes |
 |---|---|
@@ -54,6 +54,23 @@ case-insensitively and ignoring punctuation and spacing, so `reading_level` or
 | `Grade Level` | `K`, `1` … `8` |
 | `Reading Level (A-Z)` | `Below A`, `A`–`Z` |
 | `Proficiency Level` | passed through as-is |
+
+### What counts as an "Excel" file
+
+The app works out what a file is from its contents, not its name, because
+assessment systems label exports loosely. All of these open:
+
+- a real `.xlsx` / `.xlsm` workbook — including one renamed to `.xls`
+- an HTML table saved with an `.xls` name (a very common web export)
+- an Excel 2003 XML Spreadsheet, also usually named `.xls`
+- CSV, TSV, or any delimited text, with any extension or none at all
+
+The one exception is the **Excel 97-2003 binary** format (a true old-style
+`.xls`). If you have one, the app says so and tells you the fix: open it in
+Excel and use **File > Save As > Excel Workbook (.xlsx)** or **CSV**.
+
+The file picker does not grey anything out — if a file can be read, you can
+select it, and anything unreadable is explained when you open it.
 
 ### Either name format
 

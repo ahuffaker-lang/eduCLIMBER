@@ -7,6 +7,7 @@ public enum SourceFileError: LocalizedError, Equatable {
     case unsupportedType(String)
     case legacyExcel
     case malformedExcel(String)
+    case malformedTable(String)
 
     public var errorDescription: String? {
         switch self {
@@ -15,10 +16,17 @@ public enum SourceFileError: LocalizedError, Equatable {
         case .unreadable(let detail):
             return "Could not open the file: \(detail)"
         case .unsupportedType(let ext):
-            return "Unsupported file type '\(ext)'. Use a .csv or .xlsx file."
+            let named = ext.isEmpty ? "This file" : "A '.\(ext)' file"
+            return "\(named) is not a spreadsheet this app can read. "
+                + "Export the assessment data as Excel (.xlsx) or CSV and try again."
         case .legacyExcel:
-            return "Legacy .xls files are not supported. Please re-save the export "
-                + "as .xlsx or .csv and try again."
+            return "This is an Excel 97-2003 workbook (the old binary .xls format), "
+                + "which this app cannot read.\nOpen it in Excel and choose "
+                + "File > Save As > Excel Workbook (.xlsx), or Save As > CSV, then "
+                + "convert that file."
+        case .malformedTable(let detail):
+            return "This file looked like a table but could not be read (\(detail)). "
+                + "Re-saving it from Excel as .xlsx or .csv usually fixes it."
         case .malformedExcel(let detail):
             return "This .xlsx file could not be read (\(detail)). "
                 + "Re-saving it from Excel as .xlsx or .csv usually fixes it."
