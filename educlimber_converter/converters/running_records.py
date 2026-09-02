@@ -12,7 +12,15 @@ import re
 import sys
 from typing import Dict, List, Optional, Sequence
 
-from ..core.spec import CHOICE, TEXT, ConversionResult, ConverterError, PromptField, RowError
+from ..core.spec import (
+    CHOICE,
+    TEXT,
+    ConversionResult,
+    ConverterError,
+    PromptField,
+    RowError,
+    SourceColumn,
+)
 from ..core.tabular import Table
 
 ASSESSMENT_GROUP = "Running Records"
@@ -39,15 +47,23 @@ OUTPUT_COLUMNS: Sequence[str] = (
 ASSESSMENT_WINDOWS = ("Trimester 1", "Trimester 2", "Trimester 3")
 SCHOOL_YEAR_PATTERN = r"^\d{4}-\d{4}$"
 
-# Header text we accept for each source column, most specific first. Matching is
-# case-insensitive and ignores punctuation/spacing (see Table.find_column).
-SOURCE_COLUMNS = {
-    "student": ("Student", "Student Name"),
-    "student_id": ("Student ID", "Student Identifier", "Student Number"),
-    "grade": ("Grade Level", "Grade"),
-    "reading_level": ("Reading Level (A-Z)", "Reading Level", "Independent Reading Level"),
-    "proficiency": ("Proficiency Level", "Proficiency"),
-}
+# The columns this converter needs. Matching is case-insensitive and ignores
+# punctuation/spacing; anything that still doesn't match is put to the user as a
+# "which column is this?" question rather than failing the run.
+SOURCE_COLUMNS = (
+    SourceColumn("student", "Student", ("Student Name",), example="Gomez, Maria"),
+    SourceColumn(
+        "student_id", "Student ID", ("Student Identifier", "Student Number"), example="100234"
+    ),
+    SourceColumn("grade", "Grade Level", ("Grade",), example="K, 1, 2 ... 8"),
+    SourceColumn(
+        "reading_level",
+        "Reading Level (A-Z)",
+        ("Reading Level", "Independent Reading Level"),
+        example="Below A, A ... Z",
+    ),
+    SourceColumn("proficiency", "Proficiency Level", ("Proficiency",), example="At Standard"),
+)
 
 # Fallback used when Data_Table.csv is missing; the CSV stays the source of truth.
 _FALLBACK_LEVELS = [
@@ -114,6 +130,7 @@ class RunningRecordsConverter:
         "Reading assessment export (Student, Student ID, Grade Level, "
         "Reading Level (A-Z), Proficiency Level)."
     )
+    source_columns = SOURCE_COLUMNS
     output_columns = list(OUTPUT_COLUMNS)
     prompts = (
         PromptField(
@@ -132,19 +149,26 @@ class RunningRecordsConverter:
         ),
     )
 
-    def convert(self, table: Table, answers: Dict[str, str]) -> ConversionResult:
+    def convert(
+        self,
+        table: Table,
+        answers: Dict[str, str],
+        columns: Optional[Dict[str, Optional[str]]] = None,
+    ) -> ConversionResult:
         window = (answers.get("assessment_window") or "").strip()
         school_year = (answers.get("school_year") or "").strip()
 
-        columns = {name: table.find_column(aliases) for name, aliases in SOURCE_COLUMNS.items()}
+        columns = dict(columns or {})
         missing = [
-            SOURCE_COLUMNS[name][0] for name, found in columns.items() if found is None
+            column.label
+            for column in SOURCE_COLUMNS
+            if column.required and not columns.get(column.key)
         ]
         if missing:
             raise ConverterError(
-                "The source file is missing these expected column(s): "
+                "No column chosen for: "
                 + ", ".join(missing)
-                + ".\nColumns found: "
+                + ".\nColumns found in this file: "
                 + (", ".join(table.headers) or "(none)")
             )
 
@@ -154,11 +178,11 @@ class RunningRecordsConverter:
 
         for index, row in enumerate(table.rows):
             row_number = table.row_number(index)
-            student = table.value(row, columns["student"])
-            student_id = table.value(row, columns["student_id"])
-            grade = table.value(row, columns["grade"])
-            reading_level = table.value(row, columns["reading_level"])
-            proficiency = table.value(row, columns["proficiency"])
+            student = table.value(row, columns.get("student"))
+            student_id = table.value(row, columns.get("student_id"))
+            grade = table.value(row, columns.get("grade"))
+            reading_level = table.value(row, columns.get("reading_level"))
+            proficiency = table.value(row, columns.get("proficiency"))
 
             row_errors: List[str] = []
 

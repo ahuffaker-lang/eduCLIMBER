@@ -44,6 +44,26 @@ class PromptField:
 
 
 @dataclass(frozen=True)
+class SourceColumn:
+    """A column a converter needs to find in the uploaded file.
+
+    Declaring these (rather than hunting for headers inside ``convert``) is what
+    lets the shell auto-match headers, and ask the user to point at the right
+    column when a header is misspelled or named something unexpected.
+    """
+
+    key: str
+    label: str  # the canonical name, shown to the user when asking
+    aliases: Sequence[str] = ()
+    required: bool = True
+    example: str = ""
+
+    @property
+    def match_names(self) -> Sequence[str]:
+        return (self.label,) + tuple(self.aliases)
+
+
+@dataclass(frozen=True)
 class RowError:
     """A single problem found in the source file."""
 
@@ -76,8 +96,17 @@ class Converter(Protocol):
     display_name: str
     description: str
     prompts: Sequence[PromptField]
+    source_columns: Sequence[SourceColumn]
     output_columns: Sequence[str]
 
-    def convert(self, table: Table, answers: Dict[str, str]) -> ConversionResult: ...
+    def convert(
+        self, table: Table, answers: Dict[str, str], columns: Dict[str, Optional[str]]
+    ) -> ConversionResult:
+        """Map *table* into output rows.
+
+        *columns* maps each :class:`SourceColumn` key to the header in this file
+        that holds it -- auto-matched, or confirmed by the user.
+        """
+        ...
 
     def default_output_name(self, answers: Dict[str, str]) -> str: ...

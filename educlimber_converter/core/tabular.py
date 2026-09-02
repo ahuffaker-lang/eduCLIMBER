@@ -17,7 +17,7 @@ class SourceFileError(Exception):
     """The source file could not be read at all."""
 
 
-def _normalize(header: str) -> str:
+def normalize_header(header: str) -> str:
     """Fold a header down to comparable letters/digits.
 
     ``"  Reading Level (A-Z) "`` and ``"reading_level_az"`` both become
@@ -40,8 +40,8 @@ class Table:
 
     def find_column(self, candidates: Sequence[str]) -> Optional[str]:
         """Return the actual header matching any of *candidates*, else ``None``."""
-        wanted = [_normalize(c) for c in candidates]
-        by_norm = {_normalize(h): h for h in self.headers}
+        wanted = [normalize_header(c) for c in candidates]
+        by_norm = {normalize_header(h): h for h in self.headers}
         for name in wanted:
             if name in by_norm:
                 return by_norm[name]

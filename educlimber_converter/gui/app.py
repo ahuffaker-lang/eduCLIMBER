@@ -16,15 +16,19 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from ..converters import CONVERTERS
+from ..core.mapping import ColumnMapping
 from ..core.pipeline import (
-    convert_file,
+    convert_table,
     format_errors,
+    load_source,
+    match_columns,
     save_result,
     suggested_output_path,
     validate_answers,
 )
 from ..core.spec import CHOICE, ConversionResult, Converter, ConverterError
-from ..core.tabular import SourceFileError
+from ..core.tabular import SourceFileError, Table
+from .column_dialog import ask_for_columns
 
 APP_TITLE = "eduCLIMBER Assessment Converter"
 PAD = 10
@@ -42,6 +46,10 @@ class ConverterApp(ttk.Frame):
         self.converter_name = tk.StringVar(value=CONVERTERS[0].display_name)
         self.prompt_vars: Dict[str, tk.StringVar] = {}
         self.result: Optional[ConversionResult] = None
+        # Column choices are remembered per loaded file, so confirming a
+        # misspelled header once covers re-converting after changing a prompt.
+        self.table: Optional[Table] = None
+        self.mapping: Optional[ColumnMapping] = None
 
         self._build_assessment_row()
         self._build_file_row()
@@ -84,6 +92,10 @@ class ConverterApp(ttk.Frame):
         ttk.Button(frame, text="Choose file...", command=self.choose_file).grid(
             row=0, column=1, padx=(PAD, 0)
         )
+        self._columns_button = ttk.Button(
+            frame, text="Match columns...", command=self.edit_columns, state="disabled"
+        )
+        self._columns_button.grid(row=0, column=2, padx=(8, 0))
         self._drop_hint = ttk.Label(frame, text="", foreground="#444")
         self._drop_hint.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
@@ -124,6 +136,7 @@ class ConverterApp(ttk.Frame):
 
     def _on_converter_changed(self) -> None:
         self._render_prompts()
+        self.mapping = None  # a different assessment expects different columns
         self._invalidate_result()
 
     def _render_prompts(self) -> None:
@@ -179,8 +192,43 @@ class ConverterApp(ttk.Frame):
     def set_source(self, path: str) -> None:
         self.source_path.set(path)
         self._file_label.configure(text=path)
+        self.table = None
+        self.mapping = None
+        self._columns_button.configure(state="disabled")
         self._invalidate_result()
         self._set_status(f"Selected: {os.path.basename(path)}\nClick Convert when ready.")
+
+    def _load(self) -> bool:
+        """Read the file and auto-match its columns. False if it could not be read."""
+        if self.table is not None and self.mapping is not None:
+            return True
+        path = self.source_path.get()
+        try:
+            self.table = load_source(path)
+        except SourceFileError as exc:
+            self._set_status(f"Could not read this file.\n\n{exc}")
+            messagebox.showerror(APP_TITLE, str(exc))
+            return False
+        self.mapping = match_columns(self.converter, self.table)
+        self._columns_button.configure(state="normal")
+        return True
+
+    def edit_columns(self) -> bool:
+        """Let the user review or fix which file column feeds each expected column."""
+        if not self.source_path.get() or not self._load():
+            return False
+        assert self.mapping is not None
+        accepted = ask_for_columns(
+            self.winfo_toplevel(), self.mapping, os.path.basename(self.source_path.get())
+        )
+        if accepted:
+            self._invalidate_result()
+            self._set_status(
+                "Column matching set:\n"
+                + "\n".join("  " + match.describe() for match in self.mapping.matches)
+                + "\n\nClick Convert when ready."
+            )
+        return accepted
 
     def convert(self) -> None:
         path = self.source_path.get()
@@ -194,8 +242,22 @@ class ConverterApp(ttk.Frame):
             return
 
         self._invalidate_result()
+        if not self._load():
+            return
+        assert self.table is not None and self.mapping is not None
+
+        # A misspelled or renamed header is a question, not a failure: ask which
+        # column to use, pre-selecting the closest header in the file.
+        if self.mapping.needs_confirmation and not self.edit_columns():
+            self._set_status(
+                "Conversion cancelled -- the columns below still need to be matched:\n"
+                + "\n".join("  " + m.column.label for m in self.mapping.unsettled)
+                + "\n\nClick 'Match columns...' to pick them."
+            )
+            return
+
         try:
-            result = convert_file(self.converter, path, answers)
+            result = convert_table(self.converter, self.table, answers, self.mapping)
         except (ConverterError, SourceFileError) as exc:
             self._set_status(f"Could not convert this file.\n\n{exc}")
             messagebox.showerror(APP_TITLE, str(exc))
