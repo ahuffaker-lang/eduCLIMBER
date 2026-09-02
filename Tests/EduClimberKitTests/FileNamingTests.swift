@@ -51,7 +51,9 @@ final class FileNamingTests: XCTestCase {
     func testSpacesAndIllegalCharactersAreRemoved() {
         let tokens = ["window": "Trimester 2", "year": "2026/2027", "language": "Español"]
         let name = FileNameTemplate("{language}_{window}_{year}").render(tokens: tokens)
-        XCTAssertEqual(name, "Espaol_Trimester2_20262027.csv")
+        // Accented letters are kept -- they are perfectly good in a file name,
+        // and mangling them would disfigure names like "Año" from {source}.
+        XCTAssertEqual(name, "Español_Trimester2_20262027.csv")
         XCTAssertFalse(name.contains("/"), "a slash would make this a path, not a name")
         XCTAssertFalse(name.contains(" "))
     }
