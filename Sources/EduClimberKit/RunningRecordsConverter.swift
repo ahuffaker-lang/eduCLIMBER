@@ -7,6 +7,16 @@ import Foundation
 public struct RunningRecordsConverter: AssessmentConverter {
     public static let assessmentGroup = "Running Records"
     public static let assessmentName = "Independent Reading Level"
+    /// Spanish records are a separate assessment in eduCLIMBER, under the same
+    /// group, so the name carries the language while the group does not.
+    public static let spanishAssessmentName = "Independent Reading Level Spanish"
+
+    public static func assessmentName(forLanguage language: String) -> String {
+        let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.caseInsensitiveCompare("Spanish") == .orderedSame
+            ? spanishAssessmentName
+            : assessmentName
+    }
     public static let assessmentWindows = ["Trimester 1", "Trimester 2", "Trimester 3"]
     public static let languages = ["English", "Spanish"]
     public static let schoolYearPattern = "^[0-9]{4}-[0-9]{4}$"
@@ -96,6 +106,7 @@ public struct RunningRecordsConverter: AssessmentConverter {
     ) throws -> ConversionResult {
         let window = trimmed(answers["assessment_window"])
         let schoolYear = trimmed(answers["school_year"])
+        let assessmentName = Self.assessmentName(forLanguage: trimmed(answers["language"]))
 
         func header(_ key: String) -> String? {
             guard let value = columns[key] else { return nil }
@@ -187,7 +198,7 @@ public struct RunningRecordsConverter: AssessmentConverter {
             // literal from context.
             let output: [String: String] = [
                 "Assessment Group": Self.assessmentGroup,
-                "Assessment Name": Self.assessmentName,
+                "Assessment Name": assessmentName,
                 "Assessment Window": window,
                 "School Year": schoolYear,
                 "Student ID": studentID,

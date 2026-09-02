@@ -121,8 +121,10 @@ Student Grade Level, Score Detail 2, Reading Level, Score Detail 1,
 Proficiency Level, Score
 ```
 
-- `Assessment Group` is always `Running Records`; `Assessment Name` is always
-  `Independent Reading Level`.
+- `Assessment Group` is always `Running Records`, for both languages.
+- `Assessment Name` follows the Language prompt: `Independent Reading Level` for
+  English, `Independent Reading Level Spanish` for Spanish — they are separate
+  assessments in eduCLIMBER.
 - `Student Middle Initial` and `Date of Birth` are always blank.
 - `Score Detail 2` / `Reading Level` hold the same value, and so do
   `Score Detail 1` / `Proficiency Level`. That duplication is what the eduCLIMBER

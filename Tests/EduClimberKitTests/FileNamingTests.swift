@@ -95,6 +95,48 @@ final class FileNamingTests: XCTestCase {
         XCTAssertEqual(url.lastPathComponent, "Spanish_Trimester2.csv")
     }
 
+    // MARK: - Language in the exported rows
+
+    /// Spanish is a separate assessment in eduCLIMBER: same group, different
+    /// name. English keeps the original name.
+    func testAssessmentNameCarriesTheLanguage() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("source.csv")
+        try ("Student,Student ID,Grade Level,Reading Level (A-Z),Proficiency Level\n"
+             + "\"Gomez, Maria\",100234,K,Below A,At Standard\n")
+            .write(to: file, atomically: true, encoding: .utf8)
+
+        let english = try Pipeline.convertFile(
+            converter: converter, url: file, answers: answers(language: "English"))
+        XCTAssertEqual(english.rows[0]["Assessment Name"], "Independent Reading Level")
+        XCTAssertEqual(english.rows[0]["Assessment Group"], "Running Records")
+
+        let spanish = try Pipeline.convertFile(
+            converter: converter, url: file, answers: answers(language: "Spanish"))
+        XCTAssertEqual(spanish.rows[0]["Assessment Name"], "Independent Reading Level Spanish")
+        XCTAssertEqual(
+            spanish.rows[0]["Assessment Group"], "Running Records",
+            "the group stays the same for both languages")
+
+        // Everything else about the row is untouched by the language.
+        XCTAssertEqual(english.rows[0]["Score"], spanish.rows[0]["Score"])
+        XCTAssertEqual(english.rows[0]["Student ID"], spanish.rows[0]["Student ID"])
+    }
+
+    func testAssessmentNameLookupIsForgivingOfCase() {
+        XCTAssertEqual(
+            RunningRecordsConverter.assessmentName(forLanguage: "spanish"),
+            "Independent Reading Level Spanish")
+        XCTAssertEqual(
+            RunningRecordsConverter.assessmentName(forLanguage: " Spanish "),
+            "Independent Reading Level Spanish")
+        XCTAssertEqual(
+            RunningRecordsConverter.assessmentName(forLanguage: "English"),
+            "Independent Reading Level")
+    }
+
     func testLanguageIsRequiredLikeTheOtherPrompts() {
         var incomplete = answers(language: "")
         incomplete["language"] = ""
