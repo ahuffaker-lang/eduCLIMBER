@@ -42,13 +42,34 @@ case-insensitively and ignoring punctuation and spacing, so `reading_level` or
 
 | Column | Notes |
 |---|---|
-| `Student` | `"Last, First"` |
+| The student name | either one `Student` column in `"Last, First"` form, **or** separate `First Name` and `Last Name` columns — whichever your export has |
 | `Student ID` | required |
 | `Grade Level` | `K`, `1` … `8` |
 | `Reading Level (A-Z)` | `Below A`, `A`–`Z` |
 | `Proficiency Level` | passed through as-is |
 
-`samples/sample_running_records.csv` is a small example to try it on.
+### Either name format
+
+Assessment exports split the student name differently, so the app takes either
+shape and works out which one it is:
+
+- a single `Student` column holding `Gomez, Maria`, or
+- separate `First Name` and `Last Name` columns holding `Maria` and `Gomez`.
+
+Nothing to configure — it detects the columns and fills eduCLIMBER's
+`Student First Name` / `Student Last Name` either way. If a file happens to have
+both, the already-split columns win (no parsing, nothing to guess), and the
+combined column fills in for any row where they're empty. A file with neither
+gets a plain message saying it needs one shape or the other, rather than an error
+on every row.
+
+Note that a combined column still has to use the comma (`Last, First`). A name
+written `Maria Gomez` is flagged rather than guessed at, because splitting on the
+space silently mangles multi-word surnames like `Van Dyke`.
+
+`samples/sample_running_records.csv` (combined) and
+`samples/sample_running_records_split_names.csv` (split) are small examples to
+try it on.
 
 ### When a column is misnamed or misspelled
 
@@ -95,7 +116,8 @@ no byte-order mark, so eduCLIMBER reads the first header cleanly.
 The conversion is all-or-nothing: if any row has a problem, **no file is written**
 and the app lists every offending row by its spreadsheet row number, so you can fix
 the source and re-run. Rows are flagged for an unrecognized or blank reading level,
-a blank Student ID, and a student name that isn't in `Last, First` form. An invalid
+a blank Student ID, a blank first or last name, and a combined student name that
+isn't in `Last, First` form. An invalid
 school year stops the run before any row is read, and an unmatched column is asked
 about rather than failing. Completely blank rows are skipped rather than flagged —
 and on an Excel file, row numbers still count them, so they match what you see in

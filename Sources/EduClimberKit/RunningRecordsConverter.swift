@@ -31,9 +31,18 @@ public struct RunningRecordsConverter: AssessmentConverter {
             placeholder: "2026-2027"),
     ]
 
+    // The name can arrive either way, so all three name columns are optional on
+    // their own: a file needs the combined column OR the split pair, which
+    // `problems(for:)` below enforces.
     public let sourceColumns: [SourceColumn] = [
         SourceColumn(key: "student", label: "Student", aliases: ["Student Name"],
-                     example: "Gomez, Maria"),
+                     isRequired: false, example: "Gomez, Maria"),
+        SourceColumn(key: "first_name", label: "First Name",
+                     aliases: ["Given Name", "Student First Name"],
+                     isRequired: false, example: "Maria"),
+        SourceColumn(key: "last_name", label: "Last Name",
+                     aliases: ["Surname", "Family Name", "Student Last Name"],
+                     isRequired: false, example: "Gomez"),
         SourceColumn(key: "student_id", label: "Student ID",
                      aliases: ["Student Identifier", "Student Number"], example: "100234"),
         SourceColumn(key: "grade", label: "Grade Level", aliases: ["Grade"],
@@ -64,6 +73,19 @@ public struct RunningRecordsConverter: AssessmentConverter {
         "Score",
     ]
 
+    /// A file must carry the student name one way or the other.
+    public func problems(for mapping: ColumnMapping) -> [String] {
+        let combined = mapping.match(for: "student")?.header != nil
+        let split = mapping.match(for: "first_name")?.header != nil
+            && mapping.match(for: "last_name")?.header != nil
+        if combined || split { return [] }
+        return [Self.missingNameColumnsMessage]
+    }
+
+    static let missingNameColumnsMessage =
+        "This file needs the student name: either a 'Student' column in "
+        + "'Last, First' form, or separate 'First Name' and 'Last Name' columns."
+
     public func convert(
         table: Table, answers: [String: String], columns: [String: String?]
     ) throws -> ConversionResult {
@@ -84,6 +106,17 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 "No column chosen for: \(missing.joined(separator: ", "))."
                 + "\nColumns found in this file: \(found)")
         }
+
+        let combinedHeader = header("student")
+        let firstHeader = header("first_name")
+        let lastHeader = header("last_name")
+        // Prefer columns that are already split -- no parsing, nothing to guess.
+        let useSplitNames = firstHeader != nil && lastHeader != nil
+        guard useSplitNames || combinedHeader != nil else {
+            let found = table.headers.isEmpty ? "(none)" : table.headers.joined(separator: ", ")
+            throw ConverterError(
+                Self.missingNameColumnsMessage + "\nColumns found in this file: \(found)")
+        }
         guard !table.rows.isEmpty else {
             throw ConverterError("The source file has a header row but no student rows.")
         }
@@ -98,14 +131,25 @@ public struct RunningRecordsConverter: AssessmentConverter {
             let proficiency = table.value(row, header("proficiency"))
 
             var rowProblems: [String] = []
-            let name = Self.splitStudentName(student)
+            var name = (first: "", last: "")
 
-            if student.isEmpty {
+            let splitFirst = table.value(row, firstHeader)
+            let splitLast = table.value(row, lastHeader)
+            if useSplitNames && !(splitFirst.isEmpty && splitLast.isEmpty) {
+                // Already split by the source system: use the values as they are.
+                name = (first: splitFirst, last: splitLast)
+                if splitFirst.isEmpty { rowProblems.append("First Name is blank.") }
+                if splitLast.isEmpty { rowProblems.append("Last Name is blank.") }
+            } else if !student.isEmpty {
+                // One combined column: "Last, First".
+                name = Self.splitStudentName(student)
+                if !student.contains(",") {
+                    rowProblems.append("Student name '\(student)' is not in 'Last, First' format.")
+                } else if name.first.isEmpty || name.last.isEmpty {
+                    rowProblems.append("Student name '\(student)' is missing a first or last name.")
+                }
+            } else {
                 rowProblems.append("Student name is blank.")
-            } else if !student.contains(",") {
-                rowProblems.append("Student name '\(student)' is not in 'Last, First' format.")
-            } else if name.first.isEmpty || name.last.isEmpty {
-                rowProblems.append("Student name '\(student)' is missing a first or last name.")
             }
             if studentID.isEmpty {
                 rowProblems.append("Student ID is blank.")
@@ -122,9 +166,11 @@ public struct RunningRecordsConverter: AssessmentConverter {
             }
 
             guard rowProblems.isEmpty, let score else {
-                let label = student.isEmpty
-                    ? (studentID.isEmpty ? "" : "Student ID \(studentID)")
-                    : student
+                var label = student
+                if label.isEmpty && !(name.first.isEmpty && name.last.isEmpty) {
+                    label = [name.last, name.first].filter { !$0.isEmpty }.joined(separator: ", ")
+                }
+                if label.isEmpty && !studentID.isEmpty { label = "Student ID \(studentID)" }
                 let prefix = label.isEmpty ? "" : "\(label) — "
                 for problem in rowProblems {
                     result.errors.append(RowError(rowNumber: rowNumber, message: prefix + problem))

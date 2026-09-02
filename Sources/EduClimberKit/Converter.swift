@@ -115,4 +115,13 @@ public protocol AssessmentConverter {
     ) throws -> ConversionResult
 
     func defaultOutputName(answers: [String: String]) -> String
+
+    /// Converter-specific rules a column mapping must satisfy, beyond "every
+    /// required column is filled in" -- for example "the name has to arrive
+    /// either as one combined column or as a first/last pair".
+    func problems(for mapping: ColumnMapping) -> [String]
+}
+
+extension AssessmentConverter {
+    public func problems(for mapping: ColumnMapping) -> [String] { [] }
 }

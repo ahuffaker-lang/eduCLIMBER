@@ -261,7 +261,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         guard sourceURL != nil, load(), let current = mapping, let window else { return false }
         var updated = current
         let accepted = ColumnMatchSheet.run(
-            over: window, mapping: &updated,
+            over: window, mapping: &updated, converter: converter,
             fileName: sourceURL?.lastPathComponent ?? "")
         if accepted {
             mapping = updated
@@ -287,16 +287,17 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         invalidateResult()
         guard load(), let table, var mapping else { return }
 
-        // A misspelled or renamed header is a question, not a failure: ask which
-        // column to use, pre-selecting the closest header in the file.
-        if mapping.needsConfirmation {
+        // A misspelled or renamed header, or a missing name column, is a question
+        // rather than a failure: ask which column to use, pre-selecting the
+        // closest header in the file.
+        if mapping.needsConfirmation || !converter.problems(for: mapping).isEmpty {
             guard editColumns(), let confirmed = self.mapping else {
-                let pending = mapping.unsettled
-                    .map { "  " + $0.column.label }
+                let pending = (mapping.unsettled.map { "  " + $0.column.label }
+                    + converter.problems(for: mapping).map { "  " + $0 })
                     .joined(separator: "\n")
                 setStatus(
-                    "Conversion cancelled — the columns below still need to be matched:\n"
-                    + pending + "\n\nClick 'Match Columns…' to pick them.")
+                    "Conversion cancelled — this still needs to be sorted out:\n"
+                    + pending + "\n\nClick 'Match Columns…' to pick the columns.")
                 return
             }
             mapping = confirmed

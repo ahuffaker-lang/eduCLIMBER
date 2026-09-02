@@ -5,14 +5,20 @@ import EduClimberKit
 /// misspelled, renamed or missing, and on demand to review the auto-matches.
 final class ColumnMatchSheet: NSWindowController {
     private var mapping: ColumnMapping
+    private let converter: AssessmentConverter
     private let fileName: String
     private var popUps: [String: NSPopUpButton] = [:]
     private var accepted = false
 
     /// Runs the sheet modally. Returns true when the user accepted the choices,
     /// which are written back into `mapping`.
-    static func run(over parent: NSWindow, mapping: inout ColumnMapping, fileName: String) -> Bool {
-        let sheet = ColumnMatchSheet(mapping: mapping, fileName: fileName)
+    static func run(
+        over parent: NSWindow,
+        mapping: inout ColumnMapping,
+        converter: AssessmentConverter,
+        fileName: String
+    ) -> Bool {
+        let sheet = ColumnMatchSheet(mapping: mapping, converter: converter, fileName: fileName)
         guard let window = sheet.window else { return false }
         parent.beginSheet(window, completionHandler: nil)
         NSApp.runModal(for: window)
@@ -25,8 +31,9 @@ final class ColumnMatchSheet: NSWindowController {
         return false
     }
 
-    init(mapping: ColumnMapping, fileName: String) {
+    init(mapping: ColumnMapping, converter: AssessmentConverter, fileName: String) {
         self.mapping = mapping
+        self.converter = converter
         self.fileName = fileName
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 640, height: 200),
@@ -41,8 +48,14 @@ final class ColumnMatchSheet: NSWindowController {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private func makeContentView() -> NSView {
-        let unmatched = mapping.unsettled.map(\.column.label)
-        let headline: String
+        var unmatched = mapping.unsettled.map(\.column.label)
+        var headline: String
+        let converterProblems = converter.problems(for: mapping)
+        if unmatched.isEmpty && !converterProblems.isEmpty {
+            // Nothing is individually missing, but the converter still needs
+            // something -- e.g. a name column in one shape or the other.
+            unmatched = []
+        }
         if unmatched.isEmpty {
             headline = "Every expected column was matched automatically. Change any of "
                 + "them here if a column was matched to the wrong header."
@@ -54,6 +67,9 @@ final class ColumnMatchSheet: NSWindowController {
                 + "match is pre-selected — change it if it's wrong."
         }
 
+        if !converterProblems.isEmpty {
+            headline = converterProblems.joined(separator: "\n") + "\n\n" + headline
+        }
         let headlineLabel = makeLabel(headline)
         headlineLabel.maximumNumberOfLines = 6
         headlineLabel.preferredMaxLayoutWidth = 600
@@ -137,7 +153,7 @@ final class ColumnMatchSheet: NSWindowController {
     @objc private func accept() {
         var candidate = mapping
         candidate.apply(choices())
-        let problems = candidate.problems()
+        let problems = candidate.problems() + converter.problems(for: candidate)
         guard problems.isEmpty else {
             // Leave the mapping untouched so the user can fix their picks.
             let alert = NSAlert()

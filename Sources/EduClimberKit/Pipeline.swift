@@ -41,7 +41,7 @@ public enum Pipeline {
         if !answerProblems.isEmpty {
             throw ConverterError(answerProblems.joined(separator: "\n"))
         }
-        let columnProblems = mapping.problems()
+        let columnProblems = mapping.problems() + converter.problems(for: mapping)
         if !columnProblems.isEmpty {
             throw ConverterError(columnProblems.joined(separator: "\n"))
         }
@@ -56,8 +56,12 @@ public enum Pipeline {
     ) throws -> ConversionResult {
         let table = try loadSource(at: url)
         let mapping = matchColumns(converter: converter, table: table)
-        if mapping.needsConfirmation {
-            throw ConverterError(mapping.unmatchedMessage())
+        if mapping.needsConfirmation || !converter.problems(for: mapping).isEmpty {
+            let extra = converter.problems(for: mapping)
+            let message = mapping.needsConfirmation
+                ? ([mapping.unmatchedMessage()] + extra).joined(separator: "\n")
+                : extra.joined(separator: "\n")
+            throw ConverterError(message)
         }
         return try convert(converter: converter, table: table, answers: answers, mapping: mapping)
     }

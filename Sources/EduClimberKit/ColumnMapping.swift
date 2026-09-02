@@ -153,7 +153,12 @@ public func similarity(column: SourceColumn, header: String) -> Double {
         let candidate = normalizeHeader(name)
         guard !candidate.isEmpty else { continue }
         var score = editDistanceRatio(candidate, target)
-        if candidate.contains(target) || target.contains(candidate) {
+        // Containment is a strong signal ("Student ID Number" holds "Student
+        // ID"), but only when the two are comparable in length -- otherwise
+        // "Student" would look like a great match for "Student First Name".
+        let shorter = Double(min(candidate.count, target.count))
+        let longer = Double(max(candidate.count, target.count))
+        if (candidate.contains(target) || target.contains(candidate)), shorter / longer >= 0.6 {
             score = max(score, 0.85)
         }
         best = max(best, score)
