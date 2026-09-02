@@ -71,8 +71,20 @@ final class ColumnMatchingTests: XCTestCase {
 
     func testRequiredColumnLeftUnsetIsReported() {
         var mapping = Pipeline.matchColumns(converter: converter, table: table(typoHeader))
+        mapping.apply(["student": "Studnt", "reading_level": nil])
+        XCTAssertEqual(mapping.problems(), ["No column chosen for 'Reading Level (A-Z)'."])
+    }
+
+    /// The name columns are optional individually -- the converter is what
+    /// requires one shape or the other -- so both layers have to be checked.
+    func testNameColumnsAreRequiredByTheConverterNotPerColumn() {
+        var mapping = Pipeline.matchColumns(converter: converter, table: table(typoHeader))
         mapping.apply(["student": nil, "reading_level": "Readng Levl (A-Z)"])
-        XCTAssertEqual(mapping.problems(), ["No column chosen for 'Student'."])
+        XCTAssertEqual(mapping.problems(), [], "no single name column is required on its own")
+        XCTAssertEqual(converter.problems(for: mapping).count, 1)
+        XCTAssertTrue(
+            converter.problems(for: mapping)[0].contains("needs the student name"),
+            converter.problems(for: mapping)[0])
     }
 
     func testUnmatchedMessageNamesTheClosestHeader() {
