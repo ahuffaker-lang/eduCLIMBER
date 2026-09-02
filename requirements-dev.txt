@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=7.0
+pyinstaller>=6.0     # build the standalone executable
+tkinterdnd2>=0.4     # optional: enables drag-and-drop onto the window
