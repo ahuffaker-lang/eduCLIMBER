@@ -3,7 +3,8 @@ import XCTest
 
 final class RunningRecordsTests: XCTestCase {
     let converter = RunningRecordsConverter()
-    let answers = ["assessment_window": "Trimester 2", "school_year": "2026-2027"]
+    let answers = ["assessment_window": "Trimester 2", "school_year": "2026-2027",
+                   "language": "English"]
     let header = "Student,Student ID,Grade Level,Reading Level (A-Z),Proficiency Level\n"
 
     func writeCSV(_ body: String, header: String? = nil, name: String = "source.csv") throws -> URL {
@@ -169,13 +170,15 @@ final class RunningRecordsTests: XCTestCase {
         for year in ["2026-2027", "2025-2026"] {
             let problems = Pipeline.validateAnswers(
                 converter: converter,
-                answers: ["assessment_window": "Trimester 1", "school_year": year])
+                answers: ["assessment_window": "Trimester 1", "school_year": year,
+                          "language": "English"])
             XCTAssertEqual(problems, [], year)
         }
         for year in ["2026 - 2027", "26-27", "2026/2027", "", "2026-20277"] {
             let problems = Pipeline.validateAnswers(
                 converter: converter,
-                answers: ["assessment_window": "Trimester 1", "school_year": year])
+                answers: ["assessment_window": "Trimester 1", "school_year": year,
+                          "language": "English"])
             XCTAssertFalse(problems.isEmpty, year)
         }
     }
@@ -183,7 +186,8 @@ final class RunningRecordsTests: XCTestCase {
     func testInvalidAssessmentWindow() {
         let problems = Pipeline.validateAnswers(
             converter: converter,
-            answers: ["assessment_window": "Trimester 4", "school_year": "2026-2027"])
+            answers: ["assessment_window": "Trimester 4", "school_year": "2026-2027",
+                      "language": "English"])
         XCTAssertEqual(problems.count, 1)
         XCTAssertTrue(problems[0].contains("Assessment Window"))
     }
@@ -214,7 +218,7 @@ final class RunningRecordsTests: XCTestCase {
     func testDefaultOutputName() {
         XCTAssertEqual(
             converter.defaultOutputName(answers: answers),
-            "Running_Records_Trimester2_2026-2027_educlimber.csv")
+            "Running_Records_English_Trimester2_2026-2027_educlimber.csv")
     }
 }
 

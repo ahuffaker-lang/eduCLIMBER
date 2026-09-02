@@ -4,7 +4,8 @@ import XCTest
 /// Matching expected columns to real headers, including misspelled ones.
 final class ColumnMatchingTests: XCTestCase {
     let converter = RunningRecordsConverter()
-    let answers = ["assessment_window": "Trimester 1", "school_year": "2026-2027"]
+    let answers = ["assessment_window": "Trimester 1", "school_year": "2026-2027",
+                   "language": "English"]
     let goodHeader = "Student,Student ID,Grade Level,Reading Level (A-Z),Proficiency Level\n"
     let typoHeader = "Studnt,Student ID,Grade Level,Readng Levl (A-Z),Proficiency Level\n"
     let row = "\"Gomez, Maria\",100234,K,Below A,At Standard\n"
