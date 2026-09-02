@@ -8,6 +8,7 @@ public struct RunningRecordsConverter: AssessmentConverter {
     public static let assessmentGroup = "Running Records"
     public static let assessmentName = "Independent Reading Level"
     public static let assessmentWindows = ["Trimester 1", "Trimester 2", "Trimester 3"]
+    public static let languages = ["English", "Spanish"]
     public static let schoolYearPattern = "^[0-9]{4}-[0-9]{4}$"
 
     public init() {}
@@ -23,6 +24,10 @@ public struct RunningRecordsConverter: AssessmentConverter {
             key: "assessment_window",
             label: "Assessment Window",
             kind: .choice(RunningRecordsConverter.assessmentWindows)),
+        PromptField(
+            key: "language",
+            label: "Language",
+            kind: .choice(RunningRecordsConverter.languages)),
         PromptField(
             key: "school_year",
             label: "School Year",
@@ -205,11 +210,15 @@ public struct RunningRecordsConverter: AssessmentConverter {
         return result
     }
 
+    /// English and Spanish batches share a window and a school year, so the
+    /// language has to be in the name for the two files to sit side by side.
+    public var defaultFileNameTemplate: String {
+        "Running_Records_{language}_{window}_{year}_educlimber"
+    }
+
     public func defaultOutputName(answers: [String: String]) -> String {
-        let window = trimmed(answers["assessment_window"]).replacingOccurrences(of: " ", with: "")
-        let schoolYear = trimmed(answers["school_year"])
-        let parts = ["Running_Records", window, schoolYear, "educlimber"].filter { !$0.isEmpty }
-        return parts.joined(separator: "_") + ".csv"
+        let tokens = FileNameTemplate.tokens(converter: self, answers: answers)
+        return FileNameTemplate(defaultFileNameTemplate).render(tokens: tokens)
     }
 
     /// Split "Last, First" into its parts. An extra comma ("Last, First, Jr")

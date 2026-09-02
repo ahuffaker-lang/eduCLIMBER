@@ -81,10 +81,25 @@ public enum Pipeline {
     }
 
     /// Default save location: next to the source file, with a descriptive name.
+    ///
+    /// Pass `template` to use a naming pattern the user has set; without one the
+    /// converter's own default is used.
     public static func suggestedOutputURL(
-        converter: AssessmentConverter, sourceURL: URL?, answers: [String: String]
+        converter: AssessmentConverter,
+        sourceURL: URL?,
+        answers: [String: String],
+        template: String? = nil
     ) -> URL {
-        let name = safeFileName(converter.defaultOutputName(answers: answers))
+        let rendered: String
+        if let template, !template.trimmingCharacters(in: .whitespaces).isEmpty {
+            let tokens = FileNameTemplate.tokens(
+                converter: converter, answers: answers,
+                sourceName: sourceURL?.lastPathComponent ?? "")
+            rendered = FileNameTemplate(template).render(tokens: tokens)
+        } else {
+            rendered = converter.defaultOutputName(answers: answers)
+        }
+        let name = safeFileName(rendered)
         let folder = sourceURL?.deletingLastPathComponent()
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop")
         return folder.appendingPathComponent(name)

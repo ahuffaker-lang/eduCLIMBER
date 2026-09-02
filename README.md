@@ -132,8 +132,36 @@ Proficiency Level, Score
   `Resources/Data_Table.csv` is the same data as a reference file, and a unit test
   fails if the two ever drift apart.
 
-Default file name: `Running_Records_<Window>_<SchoolYear>_educlimber.csv`, saved
-wherever you choose (the source folder is suggested). Written as plain UTF-8 with
+### File naming
+
+English and Spanish batches share a trimester and a school year, so the language
+is part of the name and the two files sit side by side rather than overwriting
+each other:
+
+```
+Running_Records_English_Trimester2_2026-2027_educlimber.csv
+Running_Records_Spanish_Trimester2_2026-2027_educlimber.csv
+```
+
+The pattern is editable in the **Saved File Name** box, which previews the exact
+name as you type and remembers what you set. Any prompt the assessment asks for
+can be used as a token, plus `{assessment}`, `{date}` and `{source}` (the source
+file's name):
+
+| Token | Example |
+|---|---|
+| `{language}` | `Spanish` |
+| `{window}` | `Trimester2` |
+| `{year}` | `2026-2027` |
+| `{assessment}` | `RunningRecords` |
+| `{date}` | `2026-09-02` |
+| `{source}` | the source file name, without its extension |
+
+Spaces and characters a file name can't hold are removed, a token you leave out
+doesn't leave a gap, and **Use Default** puts the standard pattern back. The save
+dialog still opens, so you can override the name for any single run.
+
+Files are saved Written as plain UTF-8 with
 no byte-order mark, so eduCLIMBER reads the first header cleanly.
 
 ## Validation

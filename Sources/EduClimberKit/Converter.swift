@@ -154,6 +154,9 @@ public protocol AssessmentConverter {
 
     func defaultOutputName(answers: [String: String]) -> String
 
+    /// The naming pattern offered for this assessment; the user can change it.
+    var defaultFileNameTemplate: String { get }
+
     /// Converter-specific rules a column mapping must satisfy, beyond "every
     /// required column is filled in" -- for example "the name has to arrive
     /// either as one combined column or as a first/last pair".
@@ -162,4 +165,11 @@ public protocol AssessmentConverter {
 
 extension AssessmentConverter {
     public func problems(for mapping: ColumnMapping) -> [String] { [] }
+
+    public var defaultFileNameTemplate: String { "{assessment}_{window}_{year}_educlimber" }
+
+    /// Token names this converter understands, for the file-name help text.
+    public var fileNameTokens: [String] {
+        FileNameTemplate.generalTokens + prompts.map(\.key) + ["window", "year"]
+    }
 }

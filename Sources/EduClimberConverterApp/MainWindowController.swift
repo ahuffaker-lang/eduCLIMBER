@@ -24,6 +24,8 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let fileLabel = makeLabel("No file selected")
     private let matchColumnsButton = NSButton()
     private let promptStack = NSStackView()
+    private let fileNameField = NSTextField()
+    private let fileNamePreview = makeLabel("", secondary: true)
     private var promptControls: [String: NSControl] = [:]
     private let statusTextView = NSTextView()
     private let convertButton = NSButton()
@@ -81,6 +83,19 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         promptStack.spacing = 8
         let promptBox = makeBox(title: "Batch Settings", views: [promptStack])
 
+        // Naming pattern. English and Spanish batches share a window and school
+        // year, so the name has to carry whatever tells them apart.
+        fileNameField.delegate = self
+        fileNameField.widthAnchor.constraint(equalToConstant: 420).isActive = true
+        let resetButton = NSButton(
+            title: "Use Default", target: self, action: #selector(resetFileNameTemplate))
+        resetButton.bezelStyle = .rounded
+        let patternRow = NSStackView(views: [fileNameField, resetButton])
+        patternRow.orientation = .horizontal
+        patternRow.spacing = 8
+        let nameBox = makeBox(
+            title: "Saved File Name", views: [patternRow, fileNamePreview])
+
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .bezelBorder
@@ -108,7 +123,8 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         buttonRow.orientation = .horizontal
         buttonRow.spacing = 8
 
-        let column = NSStackView(views: [assessmentBox, fileBox, promptBox, statusBox, buttonRow])
+        let column = NSStackView(
+            views: [assessmentBox, fileBox, promptBox, nameBox, statusBox, buttonRow])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 12
@@ -124,6 +140,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
             assessmentBox.widthAnchor.constraint(equalTo: column.widthAnchor),
             fileBox.widthAnchor.constraint(equalTo: column.widthAnchor),
             promptBox.widthAnchor.constraint(equalTo: column.widthAnchor),
+            nameBox.widthAnchor.constraint(equalTo: column.widthAnchor),
             statusBox.widthAnchor.constraint(equalTo: column.widthAnchor),
             buttonRow.widthAnchor.constraint(equalTo: column.widthAnchor),
             scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 180),
@@ -157,6 +174,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
 
     /// Build the batch-settings controls from whatever the converter declares.
     private func renderPrompts() {
+        defer { loadFileNameTemplate() }
         for view in promptStack.arrangedSubviews {
             promptStack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -192,6 +210,38 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         }
     }
 
+    /// The naming pattern is remembered per assessment, so it survives quitting.
+    private var fileNameDefaultsKey: String { "fileNameTemplate.\(converter.key)" }
+
+    private func loadFileNameTemplate() {
+        let stored = UserDefaults.standard.string(forKey: fileNameDefaultsKey)
+        let template = (stored?.isEmpty == false) ? stored! : converter.defaultFileNameTemplate
+        fileNameField.stringValue = template
+        updateFileNamePreview()
+    }
+
+    @objc private func resetFileNameTemplate() {
+        UserDefaults.standard.removeObject(forKey: fileNameDefaultsKey)
+        fileNameField.stringValue = converter.defaultFileNameTemplate
+        updateFileNamePreview()
+    }
+
+    private func fileNameTemplate() -> String {
+        let typed = fileNameField.stringValue.trimmingCharacters(in: .whitespaces)
+        return typed.isEmpty ? converter.defaultFileNameTemplate : typed
+    }
+
+    private func updateFileNamePreview() {
+        UserDefaults.standard.set(fileNameField.stringValue, forKey: fileNameDefaultsKey)
+        let tokens = FileNameTemplate.tokens(
+            converter: converter, answers: answers(),
+            sourceName: sourceURL?.lastPathComponent ?? "")
+        let name = FileNameTemplate(fileNameTemplate()).render(tokens: tokens)
+        let available = converter.fileNameTokens.map { "{\($0)}" }.joined(separator: " ")
+        fileNamePreview.stringValue = "Saves as: \(name)\nAvailable: \(available)"
+        fileNamePreview.maximumNumberOfLines = 2
+    }
+
     private func answers() -> [String: String] {
         var values: [String: String] = [:]
         for prompt in converter.prompts {
@@ -215,9 +265,15 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         invalidateResult()
     }
 
-    @objc private func promptChanged() { invalidateResult() }
+    @objc private func promptChanged() {
+        invalidateResult()
+        updateFileNamePreview()
+    }
 
-    func controlTextDidChange(_ notification: Notification) { invalidateResult() }
+    func controlTextDidChange(_ notification: Notification) {
+        if (notification.object as? NSTextField) !== fileNameField { invalidateResult() }
+        updateFileNamePreview()
+    }
 
     @objc private func chooseFile() {
         let panel = NSOpenPanel()
@@ -360,7 +416,8 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     @objc private func saveResult() {
         guard let result else { return }
         let suggested = Pipeline.suggestedOutputURL(
-            converter: converter, sourceURL: sourceURL, answers: answers())
+            converter: converter, sourceURL: sourceURL, answers: answers(),
+            template: fileNameTemplate())
 
         let panel = NSSavePanel()
         panel.title = "Save eduCLIMBER CSV"
