@@ -24,6 +24,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let fileLabel = makeLabel("No file selected")
     private let matchColumnsButton = NSButton()
     private let promptStack = NSStackView()
+    private let benchmarkLabel = makeLabel("", secondary: true)
     private let fileNameField = NSTextField()
     private let fileNamePreview = makeLabel("", secondary: true)
     private var promptControls: [String: NSControl] = [:]
@@ -81,7 +82,9 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         promptStack.orientation = .vertical
         promptStack.alignment = .leading
         promptStack.spacing = 8
-        let promptBox = makeBox(title: "Batch Settings", views: [promptStack])
+        benchmarkLabel.maximumNumberOfLines = 2
+        benchmarkLabel.isHidden = true
+        let promptBox = makeBox(title: "Batch Settings", views: [promptStack, benchmarkLabel])
 
         // Naming pattern. English and Spanish batches share a window and school
         // year, so the name has to carry whatever tells them apart.
@@ -174,7 +177,10 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
 
     /// Build the batch-settings controls from whatever the converter declares.
     private func renderPrompts() {
-        defer { loadFileNameTemplate() }
+        defer {
+            loadFileNameTemplate()
+            updateBenchmarkLine()
+        }
         for view in promptStack.arrangedSubviews {
             promptStack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -268,11 +274,29 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     @objc private func promptChanged() {
         invalidateResult()
         updateFileNamePreview()
+        updateBenchmarkLine()
     }
 
     func controlTextDidChange(_ notification: Notification) {
         if (notification.object as? NSTextField) !== fileNameField { invalidateResult() }
         updateFileNamePreview()
+        updateBenchmarkLine()
+    }
+
+    /// Names the exact scoring table about to be applied -- e.g. which year's
+    /// benchmark rubric -- so it is visible before Convert is ever clicked.
+    /// Converters without such a table (the default) simply hide the line.
+    private func updateBenchmarkLine() {
+        guard let summary = converter.scoringTableSummary(for: answers()) else {
+            benchmarkLabel.isHidden = true
+            return
+        }
+        benchmarkLabel.isHidden = false
+        if summary.isCarriedForward, let note = summary.carriedForwardNote {
+            benchmarkLabel.stringValue = "\(summary.text)  (\(note))"
+        } else {
+            benchmarkLabel.stringValue = summary.text
+        }
     }
 
     @objc private func chooseFile() {
@@ -356,6 +380,21 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
             return
         }
 
+        // A dated scoring table carried forward for a later year than it was
+        // built for is a real judgment call -- confirm rather than apply it
+        // silently, even though the persistent Benchmark line already shows it.
+        if let summary = converter.scoringTableSummary(for: answers), summary.isCarriedForward {
+            let note = summary.carriedForwardNote.map { " (\($0))" } ?? ""
+            guard confirm(
+                "Using an Older Benchmark Table",
+                "\(summary.text)\(note). It will still be used for this batch. "
+                + "Continue, or cancel to update the table first.")
+            else {
+                setStatus("Conversion cancelled.")
+                return
+            }
+        }
+
         invalidateResult()
         guard load(), let table, var mapping else { return }
 
@@ -379,14 +418,16 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
             let converted = try Pipeline.convert(
                 converter: converter, table: table, answers: answers, mapping: mapping)
             let name = sourceURL?.lastPathComponent ?? "this file"
-            if !converted.errors.isEmpty {
-                // Blank and half-filled rows are normal in a real export. Show
-                // what is wrong and let the user skip those rows rather than
-                // throwing away a conversion that is otherwise fine.
+            if !converted.errors.isEmpty || !converted.notices.isEmpty {
+                // Blank and half-filled rows are normal in a real export, and a
+                // benchmark disagreement is worth a look even when nothing blocks
+                // the export -- so the review window opens for either case, not
+                // just when something has to be skipped.
                 setStatus(
                     "\(converted.rows.count) row(s) ready, "
-                    + "\(converted.skippedRowCount) row(s) with problems in \(name):\n\n"
-                    + converted.issuesReport())
+                    + "\(converted.skippedRowCount) row(s) with problems, "
+                    + "\(converted.noticeIssues.count) row(s) with benchmark notices "
+                    + "in \(name):\n\n" + converted.fullReport())
                 guard let window else { return }
                 let decision = ReviewIssuesSheet.run(
                     over: window, result: converted, fileName: name)
@@ -394,7 +435,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
                     setStatus(
                         "Conversion cancelled — nothing was exported.\n"
                         + "\(converted.skippedRowCount) row(s) need fixing in \(name):\n\n"
-                        + converted.issuesReport())
+                        + converted.fullReport())
                     return
                 }
             }
@@ -449,6 +490,18 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
 
     private func setStatus(_ text: String) {
         statusTextView.string = text
+    }
+
+    /// A synchronous Continue/Cancel prompt, for a decision that has to gate what
+    /// happens next -- unlike `showAlert`, which just informs.
+    private func confirm(_ title: String, _ message: String, continueTitle: String = "Continue") -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: continueTitle)
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func showAlert(_ message: String, style: NSAlert.Style) {

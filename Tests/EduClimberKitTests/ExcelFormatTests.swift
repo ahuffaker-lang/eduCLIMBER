@@ -6,7 +6,7 @@ import XCTest
 /// app decides by content, so all of these have to convert.
 final class ExcelFormatTests: XCTestCase {
     let converter = RunningRecordsConverter()
-    let answers = ["assessment_window": "Trimester 1", "school_year": "2026-2027",
+    let answers = ["assessment_window": "Trimester 2", "school_year": "2026-2027",
                    "language": "English"]
 
     func fixture(_ name: String) -> URL {

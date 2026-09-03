@@ -106,7 +106,8 @@ public struct RunningRecordsConverter: AssessmentConverter {
     ) throws -> ConversionResult {
         let window = trimmed(answers["assessment_window"])
         let schoolYear = trimmed(answers["school_year"])
-        let assessmentName = Self.assessmentName(forLanguage: trimmed(answers["language"]))
+        let language = trimmed(answers["language"])
+        let assessmentName = Self.assessmentName(forLanguage: language)
 
         func header(_ key: String) -> String? {
             guard let value = columns[key] else { return nil }
@@ -135,6 +136,19 @@ public struct RunningRecordsConverter: AssessmentConverter {
         }
         guard !table.rows.isEmpty else {
             throw ConverterError("The source file has a header row but no student rows.")
+        }
+
+        // Both are whole-batch, not per-row: every row shares one language and one
+        // assessment window, so a problem with either is reported once up front
+        // rather than repeated on every row.
+        guard let benchmark = BenchmarkRegistry.select(language: language, schoolYear: schoolYear) else {
+            throw ConverterError(
+                "No benchmark table is registered for '\(language)'. This is a setup "
+                + "problem, not something wrong with the file -- add a rubric for this "
+                + "language to BenchmarkRegistry.")
+        }
+        guard let trimesterKey = Self.trimesterKey(forWindow: window) else {
+            throw ConverterError("Unrecognized Assessment Window '\(window)'.")
         }
 
         var result = ConversionResult(columns: outputColumns)
@@ -181,17 +195,69 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 }
             }
 
-            guard rowProblems.isEmpty, let score else {
-                var label = student
-                if label.isEmpty && !(name.first.isEmpty && name.last.isEmpty) {
-                    label = [name.last, name.first].filter { !$0.isEmpty }.joined(separator: ", ")
+            // The benchmark: grade coverage and "no scale for this window" exclude
+            // the row like any other problem (grades 6-8 and Kindergarten Trimester 1
+            // are the known cases). A disagreement with the sheet's own Proficiency
+            // Level does not exclude the row -- that becomes a notice below instead,
+            // so it can be spot-checked rather than pass silently.
+            var benchmarkScore: Int?
+            var benchmarkGradeKey: String?
+            if let gradeKey = BenchmarkGrade.key(forSourceGrade: grade) {
+                benchmarkGradeKey = gradeKey
+                if let cell = benchmark.rubric.cell(grade: gradeKey, trimester: trimesterKey),
+                   cell.hasScale {
+                    if let computed = cell.score(forLevel: readingLevel) {
+                        benchmarkScore = computed
+                    } else if score != nil {
+                        // Should not happen once a rubric tiles Below A...Z+ cleanly
+                        // (every shipped table is tested for that), but never silently
+                        // guess at a score.
+                        rowProblems.append(
+                            "The \(benchmark.rubric.label) benchmark has no band for reading "
+                            + "level '\(readingLevel)' at \(Self.displayGrade(gradeKey)) \(window).")
+                    }
+                } else {
+                    rowProblems.append(
+                        "\(Self.displayGrade(gradeKey)) \(window) has no benchmark scale in "
+                        + "the \(benchmark.rubric.label) table; this row was not scored.")
                 }
-                if label.isEmpty && !studentID.isEmpty { label = "Student ID \(studentID)" }
-                let prefix = label.isEmpty ? "" : "\(label) — "
+            } else {
+                rowProblems.append(
+                    Self.benchmarkGradeProblem(rawGrade: grade, rubricLabel: benchmark.rubric.label))
+            }
+
+            var label = student
+            if label.isEmpty && !(name.first.isEmpty && name.last.isEmpty) {
+                label = [name.last, name.first].filter { !$0.isEmpty }.joined(separator: ", ")
+            }
+            if label.isEmpty && !studentID.isEmpty { label = "Student ID \(studentID)" }
+            let labelPrefix = label.isEmpty ? "" : "\(label) — "
+
+            guard rowProblems.isEmpty, let score else {
                 for problem in rowProblems {
-                    result.errors.append(RowError(rowNumber: rowNumber, message: prefix + problem))
+                    result.errors.append(RowError(rowNumber: rowNumber, message: labelPrefix + problem))
                 }
                 continue
+            }
+
+            // The benchmark's score wins when it disagrees with what the sheet
+            // already carried, but the disagreement is surfaced as a notice rather
+            // than applied silently. A blank source value is filled in without
+            // comment -- that is the ordinary case, not something to flag.
+            var finalProficiency = proficiency
+            if let benchmarkScore {
+                let computedText = String(benchmarkScore)
+                if proficiency.isEmpty || proficiency == computedText {
+                    finalProficiency = computedText
+                } else {
+                    finalProficiency = computedText
+                    result.notices.append(RowError(
+                        rowNumber: rowNumber,
+                        message: labelPrefix + "sheet Proficiency Level was '\(proficiency)'; "
+                            + "the \(benchmark.rubric.label) benchmark for "
+                            + "\(Self.displayGrade(benchmarkGradeKey ?? grade)) \(window) at "
+                            + "level \(readingLevel) is \(computedText). The benchmark value was used."))
+                }
             }
 
             // Annotated so the type-checker does not have to solve a 15-entry
@@ -212,13 +278,57 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 // wants the same value in both columns.
                 "Score Detail 2": readingLevel,
                 "Reading Level": readingLevel,
-                "Score Detail 1": proficiency,
-                "Proficiency Level": proficiency,
+                "Score Detail 1": finalProficiency,
+                "Proficiency Level": finalProficiency,
                 "Score": String(score),
             ]
             result.rows.append(output)
         }
         return result
+    }
+
+    static func trimesterKey(forWindow window: String) -> String? {
+        switch window {
+        case "Trimester 1": return "T1"
+        case "Trimester 2": return "T2"
+        case "Trimester 3": return "T3"
+        default: return nil
+        }
+    }
+
+    static func displayGrade(_ key: String) -> String {
+        key == "Kinder" ? "Kindergarten" : key
+    }
+
+    static func benchmarkGradeProblem(rawGrade: String, rubricLabel: String) -> String {
+        let trimmedGrade = rawGrade.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedGrade.isEmpty {
+            return "Grade Level is blank, so a \(rubricLabel) benchmark score could not be "
+                + "determined."
+        }
+        if let number = Int(trimmedGrade), (6...8).contains(number) {
+            return "Grade \(number) is not covered by the \(rubricLabel) benchmark "
+                + "(Kindergarten through Grade 5); this row was not scored."
+        }
+        return "Grade Level '\(trimmedGrade)' is not covered by the \(rubricLabel) benchmark "
+            + "(Kindergarten through Grade 5); this row was not scored."
+    }
+
+    public func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary? {
+        let language = trimmed(answers["language"])
+        let schoolYear = trimmed(answers["school_year"])
+        guard !language.isEmpty, !schoolYear.isEmpty,
+              let selection = BenchmarkRegistry.select(language: language, schoolYear: schoolYear)
+        else { return nil }
+
+        let text = "Benchmark: \(selection.rubric.label) · Grades K-5"
+        guard selection.isCarriedForward, let requested = selection.requestedStartYear else {
+            return ScoringTableSummary(text: text)
+        }
+        return ScoringTableSummary(
+            text: text,
+            isCarriedForward: true,
+            carriedForwardNote: "no table for \(requested)-\(requested + 1) yet")
     }
 
     /// English and Spanish batches share a window and a school year, so the

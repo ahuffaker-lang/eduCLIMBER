@@ -134,6 +134,45 @@ Proficiency Level, Score
   `Resources/Data_Table.csv` is the same data as a reference file, and a unit test
   fails if the two ever drift apart.
 
+### Benchmark scoring (Proficiency Level)
+
+`Proficiency Level` / `Score Detail 1` is not just passed through from the
+source file — it is computed from the district's benchmark rubric (Reading
+Level × Grade × Assessment Window), using whichever rubric applies to the
+batch's Language and School Year:
+
+- A **blank** value in the source file is filled in with the computed score,
+  silently — that's the normal case.
+- An **existing** value that already matches the computed score is left as-is.
+- An existing value that **disagrees** is overwritten with the computed score,
+  and the row gets a **benchmark notice** — informational, not blocking. The
+  row still converts and exports; the notice is just the chance to see why the
+  value changed.
+- **Grades 6–8**, and **Kindergarten + Trimester 1** (no rubric scale exists
+  for either), are excluded from export entirely and flagged as a blocking
+  **problem** in the review window, whether or not the source already had a
+  Proficiency Level.
+
+Which rubric applies depends on Language and School Year:
+
+- **Spanish** uses one table, regardless of year.
+- **English** uses one table for **2025–2026 and earlier**, and a different
+  one for **2026–2027 and later**.
+
+The main window shows a persistent `Benchmark: {table} · Grades K-5` line
+that updates as you change the Language and School Year prompts, so the
+applicable table is visible before you convert. Converting a school year past
+a dated rubric's own year (e.g. 2028–2029 against the 2026–27 table) shows a
+confirmation dialog, since that table is being carried forward rather than
+replaced by something built for that year.
+
+The rubric tables live in `Sources/EduClimberKit/BenchmarkRegistry.swift` and
+`Sources/EduClimberKit/BenchmarkRubric.swift`, sourced from the district's
+rubric sheets; `Resources/Benchmarks/*.csv` are the same data as reference
+files, and a unit test fails if the two ever drift apart. Adding a new year's
+table means adding another `BenchmarkRubric` entry with its
+`effectiveFromYear` — no other code changes.
+
 ### File naming
 
 English and Spanish batches share a trimester and a school year, so the language
@@ -190,6 +229,12 @@ rows are skipped silently rather than listed —
 and on an Excel file, row numbers still count them, so they match what you see in
 Excel.
 
+The same review window also shows **benchmark notices**, in amber, separate
+from the red problems above — see [Benchmark scoring](#benchmark-scoring-proficiency-level).
+Notices don't block anything and don't reduce what's exported; they open the
+review window on their own so a Proficiency Level the app corrected is never
+missed.
+
 School year must match `YYYY-YYYY` exactly — no spaces.
 
 ## Project layout
@@ -207,6 +252,8 @@ Sources/
     Converter.swift         PromptField / SourceColumn / AssessmentConverter
     RunningRecordsConverter.swift   source columns, field mapping, prompts
     ReadingLevels.swift     the Reading Level → Score table
+    BenchmarkRubric.swift   rubric band matching (BenchmarkCell, BenchmarkBand)
+    BenchmarkRegistry.swift the rubric tables + selection by language/school year
     CSVWriter.swift         the eduCLIMBER CSV
     Pipeline.swift          read → match columns → map → save
   EduClimberConverterApp/   AppKit UI

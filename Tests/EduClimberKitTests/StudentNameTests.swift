@@ -5,7 +5,7 @@ import XCTest
 /// First Name / Last Name columns; both must land in the eduCLIMBER format.
 final class StudentNameTests: XCTestCase {
     let converter = RunningRecordsConverter()
-    let answers = ["assessment_window": "Trimester 1", "school_year": "2026-2027",
+    let answers = ["assessment_window": "Trimester 2", "school_year": "2026-2027",
                    "language": "English"]
 
     let splitHeader = "First Name,Last Name,Student ID,Grade Level,Reading Level (A-Z),Proficiency Level\n"

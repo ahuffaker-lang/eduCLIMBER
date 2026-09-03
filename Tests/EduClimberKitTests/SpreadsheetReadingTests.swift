@@ -4,7 +4,7 @@ import XCTest
 /// Reading the two source formats: CSV quirks and real .xlsx files.
 final class SpreadsheetReadingTests: XCTestCase {
     let converter = RunningRecordsConverter()
-    let answers = ["assessment_window": "Trimester 1", "school_year": "2026-2027",
+    let answers = ["assessment_window": "Trimester 2", "school_year": "2026-2027",
                    "language": "English"]
 
     var fixtureURL: URL {

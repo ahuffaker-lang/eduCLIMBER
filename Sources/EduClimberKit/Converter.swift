@@ -85,11 +85,20 @@ public struct ConversionResult {
     public var columns: [String]
     public var rows: [[String: String]]
     public var errors: [RowError]
+    /// Informational, non-blocking findings -- currently just a benchmark score
+    /// that disagreed with the value already in the source file. The row still
+    /// converts (with the benchmark's value); a notice just surfaces the
+    /// disagreement rather than let it pass silently.
+    public var notices: [RowError]
 
-    public init(columns: [String], rows: [[String: String]] = [], errors: [RowError] = []) {
+    public init(
+        columns: [String], rows: [[String: String]] = [],
+        errors: [RowError] = [], notices: [RowError] = []
+    ) {
         self.columns = columns
         self.rows = rows
         self.errors = errors
+        self.notices = notices
     }
 
     public var isClean: Bool { errors.isEmpty }
@@ -100,22 +109,42 @@ public struct ConversionResult {
     /// Problems grouped by spreadsheet row, in the order they appear in the
     /// file. One row can fail for several reasons (a blank ID *and* a blank
     /// reading level), and the review window lists a row once, not twice.
-    public var issues: [RowIssue] {
-        var order: [Int] = []
-        var problemsByRow: [Int: [String]] = [:]
-        for error in errors {
-            if problemsByRow[error.rowNumber] == nil { order.append(error.rowNumber) }
-            problemsByRow[error.rowNumber, default: []].append(error.message)
-        }
-        return order.map { RowIssue(rowNumber: $0, problems: problemsByRow[$0] ?? []) }
-    }
+    public var issues: [RowIssue] { Self.group(errors) }
+
+    /// Notices grouped the same way as `issues`, but never block the export.
+    public var noticeIssues: [RowIssue] { Self.group(notices) }
+
+    public var hasNotices: Bool { !notices.isEmpty }
 
     /// How many rows would be left out if the user chooses to skip them.
+    /// Notices never contribute to this -- they do not block anything.
     public var skippedRowCount: Int { issues.count }
 
-    /// The issue list as text, for copying out or pasting into an email.
+    private static func group(_ items: [RowError]) -> [RowIssue] {
+        var order: [Int] = []
+        var byRow: [Int: [String]] = [:]
+        for item in items {
+            if byRow[item.rowNumber] == nil { order.append(item.rowNumber) }
+            byRow[item.rowNumber, default: []].append(item.message)
+        }
+        return order.map { RowIssue(rowNumber: $0, problems: byRow[$0] ?? []) }
+    }
+
+    /// The problem list as text, for copying out or pasting into an email.
     public func issuesReport() -> String {
         issues.map(\.description).joined(separator: "\n")
+    }
+
+    public func noticesReport() -> String {
+        noticeIssues.map(\.description).joined(separator: "\n")
+    }
+
+    /// Notices and problems together, for the review window's "Copy List" button.
+    public func fullReport() -> String {
+        var parts: [String] = []
+        if hasNotices { parts.append("Benchmark notices:\n" + noticesReport()) }
+        if !issues.isEmpty { parts.append("Problems:\n" + issuesReport()) }
+        return parts.joined(separator: "\n\n")
     }
 }
 
@@ -161,10 +190,36 @@ public protocol AssessmentConverter {
     /// required column is filled in" -- for example "the name has to arrive
     /// either as one combined column or as a first/last pair".
     func problems(for mapping: ColumnMapping) -> [String]
+
+    /// A short description of any scoring table this batch will apply -- e.g.
+    /// which year's benchmark rubric -- shown so the user can see what is about
+    /// to be applied before converting. `nil` when the converter has no such
+    /// table (the default) or the answers given so far don't yet determine one.
+    func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary?
+}
+
+/// What `scoringTableSummary(for:)` reports about the table in effect.
+public struct ScoringTableSummary {
+    /// e.g. "Benchmark: English 2026-27 · Grades K-5"
+    public let text: String
+    /// True when a dated table was carried forward for a later year than it was
+    /// built for, because nothing newer has been loaded.
+    public let isCarriedForward: Bool
+    /// Shown alongside `text` only when `isCarriedForward` is true, e.g.
+    /// "no table for 2028-2029 yet".
+    public let carriedForwardNote: String?
+
+    public init(text: String, isCarriedForward: Bool = false, carriedForwardNote: String? = nil) {
+        self.text = text
+        self.isCarriedForward = isCarriedForward
+        self.carriedForwardNote = carriedForwardNote
+    }
 }
 
 extension AssessmentConverter {
     public func problems(for mapping: ColumnMapping) -> [String] { [] }
+
+    public func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary? { nil }
 
     public var defaultFileNameTemplate: String { "{assessment}_{window}_{year}_educlimber" }
 
