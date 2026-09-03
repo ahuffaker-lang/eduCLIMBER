@@ -4,12 +4,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.mainMenu = Self.makeMenu()
         applyIconWhenRunningUnbundled()
         let controller = MainWindowController()
+        windowController = controller
+        NSApp.mainMenu = Self.makeMenu(newFileTarget: controller)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
-        windowController = controller
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -37,9 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The minimum menu bar a Mac app is expected to have: Quit, and the edit
-    /// commands that make the text fields behave normally.
-    static func makeMenu() -> NSMenu {
+    /// The minimum menu bar a Mac app is expected to have: Quit, a File menu
+    /// with New (there is otherwise no way to start a second file without
+    /// quitting and reopening), and the edit commands that make the text
+    /// fields behave normally.
+    static func makeMenu(newFileTarget: MainWindowController) -> NSMenu {
         let appName = ProcessInfo.processInfo.processName
         let mainMenu = NSMenu()
 
@@ -61,6 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
+
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        let newItem = NSMenuItem(
+            title: "New", action: #selector(MainWindowController.startNewFile), keyEquivalent: "n")
+        newItem.target = newFileTarget
+        fileMenu.addItem(newItem)
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
 
         let editMenuItem = NSMenuItem()
         let editMenu = NSMenu(title: "Edit")

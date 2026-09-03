@@ -43,10 +43,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         window.setFrameAutosaveName("MainWindow")
         self.init(window: window)
         window.contentView = makeContentView()
-        renderPrompts()
-        setStatus(
-            "Choose a source export (.csv or .xlsx), fill in the batch settings, "
-            + "then click Convert.\n\nYou can also drag a file onto this window.")
+        startNewFile()
     }
 
     // MARK: - Layout
@@ -322,6 +319,27 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         var seen = Set<String>()
         return types.filter { seen.insert($0.identifier).inserted }
     }()
+
+    /// Puts the window back to its just-launched state: no file, no batch
+    /// answers, no result -- so starting the next conversion doesn't require
+    /// quitting and reopening the app. The assessment choice resets too, since
+    /// leaving it as-is while clearing everything else it governs (the prompts,
+    /// the file-name template) would leave the window in a state init() never
+    /// produces on its own.
+    @objc func startNewFile() {
+        sourceURL = nil
+        table = nil
+        mapping = nil
+        fileLabel.stringValue = "No file selected"
+        matchColumnsButton.isEnabled = false
+        invalidateResult()
+        assessmentPopUp.selectItem(at: 0)
+        summaryLabel.stringValue = converter.summary
+        renderPrompts()
+        setStatus(
+            "Choose a source export (.csv or .xlsx), fill in the batch settings, "
+            + "then click Convert.\n\nYou can also drag a file onto this window.")
+    }
 
     func setSource(_ url: URL) {
         sourceURL = url
