@@ -64,21 +64,21 @@ final class BenchmarkRubricTests: XCTestCase {
 
     // MARK: - Registry selection
 
-    func testEnglishSelectsThePreTwentyTwentySixTableBeforeItsEffectiveYear() {
+    func testEnglishSelectsThePreTwentyTwentySixTableBeforeItsEffectiveYear() throws {
         let selection = try XCTUnwrap(
             BenchmarkRegistry.select(language: "English", schoolYear: "2025-2026"))
         XCTAssertEqual(selection.rubric.label, "English 2019-20")
         XCTAssertFalse(selection.isCarriedForward)
     }
 
-    func testEnglishSelectsTheNewTableExactlyAtItsEffectiveYear() {
+    func testEnglishSelectsTheNewTableExactlyAtItsEffectiveYear() throws {
         let selection = try XCTUnwrap(
             BenchmarkRegistry.select(language: "English", schoolYear: "2026-2027"))
         XCTAssertEqual(selection.rubric.label, "English 2026-27")
         XCTAssertFalse(selection.isCarriedForward)
     }
 
-    func testEnglishCarriesTheNewTableForwardPastItsEffectiveYear() {
+    func testEnglishCarriesTheNewTableForwardPastItsEffectiveYear() throws {
         let selection = try XCTUnwrap(
             BenchmarkRegistry.select(language: "English", schoolYear: "2028-2029"))
         XCTAssertEqual(selection.rubric.label, "English 2026-27")
