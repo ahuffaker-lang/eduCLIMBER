@@ -151,6 +151,63 @@ final class BenchmarkScoringTests: XCTestCase {
         XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "3")
     }
 
+    // MARK: - "Below A" is always a fixed floor score of 0
+
+    /// A blank sheet value at "Below A" is filled in with 0, not whatever the
+    /// rubric's own lowest band happens to say.
+    func testBelowAScoresZero() throws {
+        let url = try writeCSV("\"Gomez, Maria\",1,3,Below A,\n")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean)
+        XCTAssertTrue(result.notices.isEmpty)
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "0")
+    }
+
+    /// Matching case-insensitively, and tolerating stray whitespace, like every
+    /// other reading level comparison in the converter.
+    func testBelowAMatchIsCaseInsensitiveAndTrimmed() throws {
+        let url = try writeCSV("\"Gomez, Maria\",1,3, below a ,\n")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers())
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "0")
+    }
+
+    /// An existing value that disagrees with 0 is overwritten and noticed, the
+    /// same as any other benchmark disagreement.
+    func testBelowAOverwritesADisagreeingExistingValueWithANotice() throws {
+        let url = try writeCSV("\"Gomez, Maria\",1,3,Below A,2\n")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "a mismatch is a notice, not a problem")
+        XCTAssertEqual(result.notices.count, 1)
+        let message = try XCTUnwrap(result.notices.first?.message)
+        XCTAssertTrue(message.contains("sheet Proficiency Level was '2'"), message)
+        XCTAssertTrue(message.contains("is 0"), message)
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "0")
+    }
+
+    /// The override applies even where the rubric itself has no scale --
+    /// Kindergarten Trimester 1 -- since it never consults the rubric at all.
+    func testBelowAScoresZeroEvenInKindergartenTrimesterOne() throws {
+        let url = try writeCSV("\"Gomez, Maria\",1,K,Below A,\n")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers(window: "Trimester 1"))
+        XCTAssertTrue(result.isClean)
+        XCTAssertTrue(result.notices.isEmpty)
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "0")
+    }
+
+    /// The override applies even to grades the benchmark doesn't cover at all.
+    func testBelowAScoresZeroEvenForGradesOutsideBenchmarkCoverage() throws {
+        let url = try writeCSV("\"Gomez, Maria\",1,6,Below A,\n")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean)
+        XCTAssertTrue(result.notices.isEmpty)
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "0")
+    }
+
     // MARK: - Scoring table summary (the persistent "Benchmark: ..." line)
 
     func testScoringTableSummaryBeforeTheTwentyTwentySixCutover() {

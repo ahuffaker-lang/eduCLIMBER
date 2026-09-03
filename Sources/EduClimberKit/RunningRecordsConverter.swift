@@ -208,11 +208,19 @@ public struct RunningRecordsConverter: AssessmentConverter {
             // row the benchmark *does* cover also does not exclude the row --
             // that becomes a notice too, so it can be spot-checked rather than
             // pass silently.
+            //
+            // "Below A" is a fixed floor score of 0, regardless of grade, window,
+            // or which rubric table is in effect -- it overrides the rubric
+            // lookup entirely rather than going through a band in any table.
             var benchmarkScore: Int?
             var benchmarkGradeKey: String?
             var benchmarkSkippedReason: String?
-            if let gradeKey = BenchmarkGrade.key(forSourceGrade: grade) {
-                benchmarkGradeKey = gradeKey
+            let gradeKey = BenchmarkGrade.key(forSourceGrade: grade)
+            benchmarkGradeKey = gradeKey
+            if readingLevel.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare("Below A") == .orderedSame {
+                benchmarkScore = 0
+            } else if let gradeKey {
                 if let cell = benchmark.rubric.cell(grade: gradeKey, trimester: trimesterKey),
                    cell.hasScale {
                     if let computed = cell.score(forLevel: readingLevel) {

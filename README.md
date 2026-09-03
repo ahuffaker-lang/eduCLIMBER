@@ -155,6 +155,11 @@ batch's Language and School Year:
   scored. Real files turn up grades the rubric doesn't plan for (a 6th
   grader in a Spanish file, for example), and dropping the row would just
   push the manual work this app exists to remove back onto the user.
+- A Reading Level of **"Below A"** always scores **0**, for every grade and
+  window, in every table — this overrides the rubric lookup entirely rather
+  than going through a band in any table. It is filled in, quality-checked
+  against an existing value, and noticed on disagreement exactly like a
+  rubric-computed score.
 
 Which rubric applies depends on Language and School Year:
 

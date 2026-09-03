@@ -69,11 +69,11 @@ final class RunningRecordsTests: XCTestCase {
     }
 
     /// The default `answers` are English, 2026-2027, Trimester 2: Grade 3 at
-    /// "Below A" falls in that benchmark's "M or below" band, score 1. The
-    /// source Proficiency Level is left blank so it is filled in silently --
-    /// this test is about the row's shape, not the benchmark's judgment calls.
+    /// "P" falls in that benchmark's "P or above" band, score 4. The source
+    /// Proficiency Level is left blank so it is filled in silently -- this
+    /// test is about the row's shape, not the benchmark's judgment calls.
     func testFullRowMapping() throws {
-        let url = try writeCSV("\"Gomez, Maria\",123456,3,Below A,\n")
+        let url = try writeCSV("\"Gomez, Maria\",123456,3,P,\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers)
         XCTAssertTrue(result.isClean)
         XCTAssertTrue(result.notices.isEmpty, "a blank source value is filled in, not flagged")
@@ -88,9 +88,9 @@ final class RunningRecordsTests: XCTestCase {
             "Student Last Name": "Gomez",
             "Date of Birth": "",
             "Student Grade Level": "3",
-            "Score Detail 2 Reading Level": "Below A",
-            "Score Detail 1 Proficiency Level": "1",
-            "Score": "1",
+            "Score Detail 2 Reading Level": "P",
+            "Score Detail 1 Proficiency Level": "4",
+            "Score": "17",
         ])
     }
 
