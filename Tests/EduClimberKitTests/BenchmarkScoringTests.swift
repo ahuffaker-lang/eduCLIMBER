@@ -63,58 +63,81 @@ final class BenchmarkScoringTests: XCTestCase {
 
     // MARK: - Grades 6-8 are excluded and flagged
 
-    func testGradesSixThroughEightAreBlockingProblems() throws {
+    /// Grades outside K-5 aren't blocked -- real files turn up grades the
+    /// rubric doesn't plan for (a 6th grader in a Spanish file, for instance),
+    /// and dropping the row would just push manual work back onto the user.
+    /// The row exports with its existing Proficiency Level untouched, plus a
+    /// notice explaining no benchmark was applied.
+    func testGradesSixThroughEightPassThroughWithANotice() throws {
         for grade in ["6", "7", "8"] {
-            let url = try writeCSV("\"Gomez, Maria\",1,\(grade),P,\n")
+            let url = try writeCSV("\"Gomez, Maria\",1,\(grade),P,At Standard\n")
             let result = try Pipeline.convertFile(
                 converter: converter, url: url, answers: answers())
-            XCTAssertTrue(result.rows.isEmpty, grade)
-            XCTAssertFalse(result.isClean, grade)
-            let message = try XCTUnwrap(result.errors.first?.message)
+            XCTAssertEqual(result.rows.count, 1, grade)
+            XCTAssertTrue(result.isClean, grade)
+            XCTAssertEqual(result.rows.first?["Proficiency Level"], "At Standard", grade)
+            XCTAssertEqual(result.rows.first?["Score Detail 1"], "At Standard", grade)
+            XCTAssertEqual(result.notices.count, 1, grade)
+            let message = try XCTUnwrap(result.notices.first?.message)
             XCTAssertTrue(message.contains("not covered by the English 2026-27 benchmark"), message)
         }
     }
 
-    // MARK: - Kindergarten Trimester 1 has no scale and is flagged
+    /// A grade the benchmark doesn't cover, with no existing Proficiency Level
+    /// either, still exports -- just blank, same as it arrived.
+    func testUnsupportedGradeWithNoExistingProficiencyExportsBlank() throws {
+        let url = try writeCSV("\"Gomez, Maria\",1,6,P,\n")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers())
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertEqual(result.rows.first?["Proficiency Level"], "")
+        XCTAssertEqual(result.notices.count, 1)
+    }
 
-    func testKindergartenTrimesterOneIsABlockingProblem() throws {
+    // MARK: - Kindergarten Trimester 1 has no scale and passes through
+
+    func testKindergartenTrimesterOnePassesThroughWithANotice() throws {
         let url = try writeCSV("\"Gomez, Maria\",1,K,A,\n")
         let result = try Pipeline.convertFile(
             converter: converter, url: url, answers: answers(window: "Trimester 1"))
-        XCTAssertTrue(result.rows.isEmpty)
-        let message = try XCTUnwrap(result.errors.first?.message)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.isClean)
+        let message = try XCTUnwrap(result.notices.first?.message)
         XCTAssertTrue(message.contains("Kindergarten Trimester 1"), message)
         XCTAssertTrue(message.contains("no benchmark scale"), message)
         XCTAssertTrue(message.contains("English 2026-27"), message)
     }
 
-    /// Kindergarten Trimester 2/3 do have a scale -- only Trimester 1 is excluded.
+    /// Kindergarten Trimester 2/3 do have a scale -- only Trimester 1 lacks one.
     func testKindergartenTrimesterTwoIsScored() throws {
         let url = try writeCSV("\"Gomez, Maria\",1,K,C,\n")
         let result = try Pipeline.convertFile(
             converter: converter, url: url, answers: answers(window: "Trimester 2"))
         XCTAssertTrue(result.isClean)
+        XCTAssertTrue(result.notices.isEmpty)
         XCTAssertEqual(result.rows.first?["Proficiency Level"], "3")
     }
 
     // MARK: - Unrecognized / blank grade
 
-    func testBlankGradeIsABlockingProblem() throws {
+    func testBlankGradePassesThroughWithANotice() throws {
         let url = try writeCSV("\"Gomez, Maria\",1,,P,\n")
         let result = try Pipeline.convertFile(
             converter: converter, url: url, answers: answers())
-        XCTAssertTrue(result.rows.isEmpty)
-        let message = try XCTUnwrap(result.errors.first?.message)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.isClean)
+        let message = try XCTUnwrap(result.notices.first?.message)
         XCTAssertTrue(message.contains("Grade Level is blank"), message)
         XCTAssertTrue(message.contains("English 2026-27"), message)
     }
 
-    func testUnrecognizedGradeIsABlockingProblem() throws {
+    func testUnrecognizedGradePassesThroughWithANotice() throws {
         let url = try writeCSV("\"Gomez, Maria\",1,TK,P,\n")
         let result = try Pipeline.convertFile(
             converter: converter, url: url, answers: answers())
-        XCTAssertTrue(result.rows.isEmpty)
-        let message = try XCTUnwrap(result.errors.first?.message)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertTrue(result.isClean)
+        let message = try XCTUnwrap(result.notices.first?.message)
         XCTAssertTrue(message.contains("Grade Level 'TK' is not covered"), message)
     }
 

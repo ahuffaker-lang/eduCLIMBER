@@ -195,13 +195,21 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 }
             }
 
-            // The benchmark: grade coverage and "no scale for this window" exclude
-            // the row like any other problem (grades 6-8 and Kindergarten Trimester 1
-            // are the known cases). A disagreement with the sheet's own Proficiency
-            // Level does not exclude the row -- that becomes a notice below instead,
-            // so it can be spot-checked rather than pass silently.
+            // The benchmark only covers Kindergarten through Grade 5, and
+            // Kindergarten has no scale in Trimester 1. A row outside that
+            // coverage is never excluded -- real data turns up grades the rubric
+            // doesn't plan for (a 6th grader in a Spanish Running Records file,
+            // for instance), and dropping the row would just push the manual work
+            // this app exists to remove back onto the user. Instead the row
+            // exports with whatever Proficiency Level the sheet already had
+            // (blank if it had none), and a notice below says why it wasn't
+            // scored. A disagreement with the sheet's own Proficiency Level for a
+            // row the benchmark *does* cover also does not exclude the row --
+            // that becomes a notice too, so it can be spot-checked rather than
+            // pass silently.
             var benchmarkScore: Int?
             var benchmarkGradeKey: String?
+            var benchmarkSkippedReason: String?
             if let gradeKey = BenchmarkGrade.key(forSourceGrade: grade) {
                 benchmarkGradeKey = gradeKey
                 if let cell = benchmark.rubric.cell(grade: gradeKey, trimester: trimesterKey),
@@ -217,13 +225,14 @@ public struct RunningRecordsConverter: AssessmentConverter {
                             + "level '\(readingLevel)' at \(Self.displayGrade(gradeKey)) \(window).")
                     }
                 } else {
-                    rowProblems.append(
+                    benchmarkSkippedReason =
                         "\(Self.displayGrade(gradeKey)) \(window) has no benchmark scale in "
-                        + "the \(benchmark.rubric.label) table; this row was not scored.")
+                        + "the \(benchmark.rubric.label) table; the row was exported without a "
+                        + "computed Proficiency Level."
                 }
             } else {
-                rowProblems.append(
-                    Self.benchmarkGradeProblem(rawGrade: grade, rubricLabel: benchmark.rubric.label))
+                benchmarkSkippedReason = Self.benchmarkGradeSkippedMessage(
+                    rawGrade: grade, rubricLabel: benchmark.rubric.label)
             }
 
             var label = student
@@ -258,6 +267,9 @@ public struct RunningRecordsConverter: AssessmentConverter {
                             + "\(Self.displayGrade(benchmarkGradeKey ?? grade)) \(window) at "
                             + "level \(readingLevel) is \(computedText). The benchmark value was used."))
                 }
+            } else if let benchmarkSkippedReason {
+                result.notices.append(
+                    RowError(rowNumber: rowNumber, message: labelPrefix + benchmarkSkippedReason))
             }
 
             // Annotated so the type-checker does not have to solve a 15-entry
@@ -300,18 +312,15 @@ public struct RunningRecordsConverter: AssessmentConverter {
         key == "Kinder" ? "Kindergarten" : key
     }
 
-    static func benchmarkGradeProblem(rawGrade: String, rubricLabel: String) -> String {
+    static func benchmarkGradeSkippedMessage(rawGrade: String, rubricLabel: String) -> String {
         let trimmedGrade = rawGrade.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedGrade.isEmpty {
             return "Grade Level is blank, so a \(rubricLabel) benchmark score could not be "
-                + "determined."
-        }
-        if let number = Int(trimmedGrade), (6...8).contains(number) {
-            return "Grade \(number) is not covered by the \(rubricLabel) benchmark "
-                + "(Kindergarten through Grade 5); this row was not scored."
+                + "determined; the row was exported without a computed Proficiency Level."
         }
         return "Grade Level '\(trimmedGrade)' is not covered by the \(rubricLabel) benchmark "
-            + "(Kindergarten through Grade 5); this row was not scored."
+            + "(Kindergarten through Grade 5); the row was exported without a computed "
+            + "Proficiency Level."
     }
 
     public func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary? {
@@ -321,7 +330,7 @@ public struct RunningRecordsConverter: AssessmentConverter {
               let selection = BenchmarkRegistry.select(language: language, schoolYear: schoolYear)
         else { return nil }
 
-        let text = "Benchmark: \(selection.rubric.label) · Grades K-5"
+        let text = "Benchmark: \(selection.rubric.label) · Grades K-5 scored, other grades pass through"
         guard selection.isCarriedForward, let requested = selection.requestedStartYear else {
             return ScoringTableSummary(text: text)
         }

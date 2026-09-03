@@ -148,10 +148,13 @@ batch's Language and School Year:
   and the row gets a **benchmark notice** — informational, not blocking. The
   row still converts and exports; the notice is just the chance to see why the
   value changed.
-- **Grades 6–8**, and **Kindergarten + Trimester 1** (no rubric scale exists
-  for either), are excluded from export entirely and flagged as a blocking
-  **problem** in the review window, whether or not the source already had a
-  Proficiency Level.
+- A grade outside **Kindergarten–5**, and **Kindergarten in Trimester 1**
+  specifically (no rubric scale exists for either), is never excluded. The
+  row exports with whatever Proficiency Level the sheet already had — blank
+  if it had none — and a **benchmark notice** explains that it wasn't
+  scored. Real files turn up grades the rubric doesn't plan for (a 6th
+  grader in a Spanish file, for example), and dropping the row would just
+  push the manual work this app exists to remove back onto the user.
 
 Which rubric applies depends on Language and School Year:
 
@@ -159,7 +162,8 @@ Which rubric applies depends on Language and School Year:
 - **English** uses one table for **2025–2026 and earlier**, and a different
   one for **2026–2027 and later**.
 
-The main window shows a persistent `Benchmark: {table} · Grades K-5` line
+The main window shows a persistent `Benchmark: {table} · Grades K-5 scored,
+other grades pass through` line
 that updates as you change the Language and School Year prompts, so the
 applicable table is visible before you convert. Converting a school year past
 a dated rubric's own year (e.g. 2028–2029 against the 2026–27 table) shows a
