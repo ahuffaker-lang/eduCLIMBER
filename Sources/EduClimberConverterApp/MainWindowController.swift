@@ -43,7 +43,6 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         window.setFrameAutosaveName("MainWindow")
         self.init(window: window)
         window.contentView = makeContentView()
-        window.registerForDraggedTypes([.fileURL])
         renderPrompts()
         setStatus(
             "Choose a source export (.csv or .xlsx), fill in the batch settings, "
@@ -55,6 +54,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private func makeContentView() -> NSView {
         let root = DropView()
         root.onDrop = { [weak self] url in self?.setSource(url) }
+        root.registerForDraggedTypes([.fileURL])
         root.translatesAutoresizingMaskIntoConstraints = false
 
         assessmentPopUp.addItems(withTitles: converters.map(\.displayName))
@@ -528,7 +528,10 @@ func makeLabel(_ text: String, secondary: Bool = false) -> NSTextField {
     return label
 }
 
-/// The window's content view, so a file can be dropped anywhere on it.
+/// The window's content view, so a file can be dropped anywhere on it. The
+/// view itself must register for the drag types it accepts -- registering the
+/// window instead (as this used to) leaves draggingEntered/performDragOperation
+/// here dead code, since AppKit only calls them on a view that registered.
 final class DropView: NSView {
     var onDrop: ((URL) -> Void)?
 
