@@ -159,21 +159,21 @@ final class BenchmarkScoringTests: XCTestCase {
     func testScoringTableSummaryBeforeTheTwentyTwentySixCutover() {
         let summary = converter.scoringTableSummary(
             for: answers(year: "2025-2026"))
-        XCTAssertEqual(summary?.text, "Benchmark: English 2019-20 · Grades K-5")
+        XCTAssertEqual(summary?.text, "Benchmark: English 2019-20 · Grades K-5 scored, other grades pass through")
         XCTAssertFalse(summary?.isCarriedForward ?? true)
     }
 
     func testScoringTableSummaryAtTheTwentyTwentySixCutover() {
         let summary = converter.scoringTableSummary(
             for: answers(year: "2026-2027"))
-        XCTAssertEqual(summary?.text, "Benchmark: English 2026-27 · Grades K-5")
+        XCTAssertEqual(summary?.text, "Benchmark: English 2026-27 · Grades K-5 scored, other grades pass through")
         XCTAssertFalse(summary?.isCarriedForward ?? true)
     }
 
     func testScoringTableSummaryCarriesForwardPastItsEffectiveYear() {
         let summary = converter.scoringTableSummary(
             for: answers(year: "2028-2029"))
-        XCTAssertEqual(summary?.text, "Benchmark: English 2026-27 · Grades K-5")
+        XCTAssertEqual(summary?.text, "Benchmark: English 2026-27 · Grades K-5 scored, other grades pass through")
         XCTAssertTrue(summary?.isCarriedForward ?? false)
         XCTAssertEqual(summary?.carriedForwardNote, "no table for 2028-2029 yet")
     }
@@ -181,7 +181,7 @@ final class BenchmarkScoringTests: XCTestCase {
     func testScoringTableSummaryForSpanish() {
         let summary = converter.scoringTableSummary(
             for: answers(year: "2026-2027", language: "Spanish"))
-        XCTAssertEqual(summary?.text, "Benchmark: Spanish 2021-22 · Grades K-5")
+        XCTAssertEqual(summary?.text, "Benchmark: Spanish 2021-22 · Grades K-5 scored, other grades pass through")
         XCTAssertFalse(summary?.isCarriedForward ?? true)
     }
 
