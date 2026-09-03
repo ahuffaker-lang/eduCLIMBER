@@ -148,22 +148,27 @@ final class ExcelFormatTests: XCTestCase {
     }
 
     /// A shared string table large enough to span CONTINUE records: strings must
-    /// not be truncated or shifted where the records join.
+    /// not be truncated or shifted where the records join. Read directly from the
+    /// table rather than through the converter, since this fixture's 399 rows
+    /// cycle through every grade (including 6-8, which the benchmark rubric
+    /// excludes) purely for volume -- that's a converter-level rule, not a fact
+    /// about whether the BIFF8 reader parsed the file correctly.
     func testLegacyBinaryWithLargeStringTable() throws {
-        let result = try Pipeline.convertFile(
-            converter: converter, url: fixture("legacy_big.xls"), answers: answers)
-        XCTAssertTrue(result.isClean, "\(result.issuesReport())")
-        XCTAssertEqual(result.rows.count, 399)
+        let table = try Pipeline.loadSource(at: fixture("legacy_big.xls"))
+        XCTAssertEqual(table.rows.count, 399)
 
-        let first = try XCTUnwrap(result.rows.first)
-        XCTAssertEqual(first["Student First Name"], "Given1-" + String(repeating: "x", count: 20))
-        XCTAssertEqual(first["Student Last Name"], "Family1-" + String(repeating: "y", count: 20))
-        XCTAssertEqual(first["Student ID"], "200001")
+        let first = table.rows[0]
+        XCTAssertEqual(
+            table.value(first, "First Name"), "Given1-" + String(repeating: "x", count: 20))
+        XCTAssertEqual(
+            table.value(first, "Last Name"), "Family1-" + String(repeating: "y", count: 20))
+        XCTAssertEqual(table.value(first, "Student ID"), "200001")
 
-        let last = try XCTUnwrap(result.rows.last)
-        XCTAssertEqual(last["Student First Name"], "Given399-" + String(repeating: "x", count: 20))
-        XCTAssertEqual(last["Student ID"], "200399")
-        XCTAssertFalse(last["Reading Level"]?.isEmpty ?? true)
+        let last = table.rows[398]
+        XCTAssertEqual(
+            table.value(last, "First Name"), "Given399-" + String(repeating: "x", count: 20))
+        XCTAssertEqual(table.value(last, "Student ID"), "200399")
+        XCTAssertFalse(table.value(last, "Reading Level (A-Z)").isEmpty)
     }
 
     func testDamagedBinaryWorkbookIsReportedNotCrashed() {
