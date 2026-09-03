@@ -69,7 +69,10 @@ public struct RunningRecordsConverter: AssessmentConverter {
                      example: "At Standard"),
     ]
 
-    /// The 15 eduCLIMBER columns, in the order the import expects.
+    /// The 13 eduCLIMBER columns, in the order the import expects. "Score
+    /// Detail 2 Reading Level" and "Score Detail 1 Proficiency Level" are each
+    /// one column with a combined header, not two columns repeating the same
+    /// value -- that's what eduCLIMBER's own template calls them.
     public let outputColumns = [
         "Assessment Group",
         "Assessment Name",
@@ -81,10 +84,8 @@ public struct RunningRecordsConverter: AssessmentConverter {
         "Student Last Name",
         "Date of Birth",
         "Student Grade Level",
-        "Score Detail 2",
-        "Reading Level",
-        "Score Detail 1",
-        "Proficiency Level",
+        "Score Detail 2 Reading Level",
+        "Score Detail 1 Proficiency Level",
         "Score",
     ]
 
@@ -285,13 +286,8 @@ public struct RunningRecordsConverter: AssessmentConverter {
                 "Student Last Name": name.last,
                 "Date of Birth": "",
                 "Student Grade Level": grade,
-                // Score Detail 2 / Reading Level and Score Detail 1 / Proficiency
-                // Level are deliberate duplicates: the eduCLIMBER import format
-                // wants the same value in both columns.
-                "Score Detail 2": readingLevel,
-                "Reading Level": readingLevel,
-                "Score Detail 1": finalProficiency,
-                "Proficiency Level": finalProficiency,
+                "Score Detail 2 Reading Level": readingLevel,
+                "Score Detail 1 Proficiency Level": finalProficiency,
                 "Score": String(score),
             ]
             result.rows.append(output)

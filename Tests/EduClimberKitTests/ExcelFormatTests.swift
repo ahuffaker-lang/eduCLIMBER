@@ -62,7 +62,7 @@ final class ExcelFormatTests: XCTestCase {
         XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
         XCTAssertEqual(result.rows[0]["Student First Name"], "Maria")
         // &nbsp; inside a cell must not survive into the upload.
-        XCTAssertEqual(result.rows[0]["Reading Level"], "Below A")
+        XCTAssertEqual(result.rows[0]["Score Detail 2 Reading Level"], "Below A")
         XCTAssertEqual(result.rows[0]["Score"], "1")
         XCTAssertEqual(result.rows[1]["Student Last Name"], "Van Dyke")
         // Numeric and quote entities decode.
@@ -110,7 +110,7 @@ final class ExcelFormatTests: XCTestCase {
         XCTAssertEqual(result.rows[0]["Score"], "1")
         // ss:Index skips an empty cell, so the level must not shift a column left.
         XCTAssertEqual(result.rows[1]["Student Last Name"], "Okafor")
-        XCTAssertEqual(result.rows[1]["Reading Level"], "J")
+        XCTAssertEqual(result.rows[1]["Score Detail 2 Reading Level"], "J")
     }
 
     // MARK: - Excel 97-2003 binary (.xls)

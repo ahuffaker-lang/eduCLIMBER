@@ -112,13 +112,13 @@ useful for checking a column wasn't matched to the wrong header.
 
 ## What it produces
 
-15 columns, in this exact order:
+13 columns, in this exact order:
 
 ```
 Assessment Group, Assessment Name, Assessment Window, School Year, Student ID,
 Student First Name, Student Middle Initial, Student Last Name, Date of Birth,
-Student Grade Level, Score Detail 2, Reading Level, Score Detail 1,
-Proficiency Level, Score
+Student Grade Level, Score Detail 2 Reading Level, Score Detail 1 Proficiency Level,
+Score
 ```
 
 - `Assessment Group` is always `Running Records`, for both languages.
@@ -126,9 +126,9 @@ Proficiency Level, Score
   English, `Independent Reading Level Spanish` for Spanish — they are separate
   assessments in eduCLIMBER.
 - `Student Middle Initial` and `Date of Birth` are always blank.
-- `Score Detail 2` / `Reading Level` hold the same value, and so do
-  `Score Detail 1` / `Proficiency Level`. That duplication is what the eduCLIMBER
-  import format wants — it is not a bug.
+- `Score Detail 2 Reading Level` and `Score Detail 1 Proficiency Level` are
+  each one column under eduCLIMBER's combined header name — not two columns
+  repeating the same value.
 - `Score` comes from the reading-level table (`Below A` → 1, `A` → 2, … `Z` → 27,
   `Z+` → 28, `MAX` → 29). The table lives in `Sources/EduClimberKit/ReadingLevels.swift`;
   `Resources/Data_Table.csv` is the same data as a reference file, and a unit test
@@ -136,7 +136,7 @@ Proficiency Level, Score
 
 ### Benchmark scoring (Proficiency Level)
 
-`Proficiency Level` / `Score Detail 1` is not just passed through from the
+`Score Detail 1 Proficiency Level` is not just passed through from the
 source file — it is computed from the district's benchmark rubric (Reading
 Level × Grade × Assessment Window), using whichever rubric applies to the
 batch's Language and School Year:

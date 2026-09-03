@@ -53,8 +53,8 @@ final class RunningRecordsTests: XCTestCase {
         XCTAssertEqual(converter.outputColumns, [
             "Assessment Group", "Assessment Name", "Assessment Window", "School Year",
             "Student ID", "Student First Name", "Student Middle Initial", "Student Last Name",
-            "Date of Birth", "Student Grade Level", "Score Detail 2", "Reading Level",
-            "Score Detail 1", "Proficiency Level", "Score",
+            "Date of Birth", "Student Grade Level", "Score Detail 2 Reading Level",
+            "Score Detail 1 Proficiency Level", "Score",
         ])
     }
 
@@ -88,21 +88,10 @@ final class RunningRecordsTests: XCTestCase {
             "Student Last Name": "Gomez",
             "Date of Birth": "",
             "Student Grade Level": "3",
-            "Score Detail 2": "Below A",
-            "Reading Level": "Below A",
-            "Score Detail 1": "1",
-            "Proficiency Level": "1",
+            "Score Detail 2 Reading Level": "Below A",
+            "Score Detail 1 Proficiency Level": "1",
             "Score": "1",
         ])
-    }
-
-    func testDuplicateColumnsStayInSync() throws {
-        let url = try writeCSV("\"Lee, Sam\",1,K,M,At Standard\n")
-        let row = try XCTUnwrap(
-            Pipeline.convertFile(converter: converter, url: url, answers: answers).rows.first)
-        XCTAssertEqual(row["Score Detail 2"], row["Reading Level"])
-        XCTAssertEqual(row["Score Detail 1"], row["Proficiency Level"])
-        XCTAssertEqual(row["Score"], "14")
     }
 
     func testHeadersMatchLooselyAndCaseInsensitively() throws {

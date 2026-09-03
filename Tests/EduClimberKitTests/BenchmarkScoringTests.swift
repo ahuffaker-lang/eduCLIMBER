@@ -32,8 +32,7 @@ final class BenchmarkScoringTests: XCTestCase {
             converter: converter, url: url, answers: answers())
         XCTAssertTrue(result.isClean)
         XCTAssertTrue(result.notices.isEmpty)
-        XCTAssertEqual(result.rows.first?["Proficiency Level"], "4")
-        XCTAssertEqual(result.rows.first?["Score Detail 1"], "4")
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "4")
     }
 
     /// A sheet value that already agrees with the rubric is left alone -- no notice.
@@ -42,7 +41,7 @@ final class BenchmarkScoringTests: XCTestCase {
         let result = try Pipeline.convertFile(
             converter: converter, url: url, answers: answers())
         XCTAssertTrue(result.notices.isEmpty)
-        XCTAssertEqual(result.rows.first?["Proficiency Level"], "4")
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "4")
     }
 
     /// A sheet value that disagrees is overwritten with the rubric's value, and
@@ -57,8 +56,7 @@ final class BenchmarkScoringTests: XCTestCase {
         XCTAssertTrue(message.contains("sheet Proficiency Level was '2'"), message)
         XCTAssertTrue(message.contains("English 2026-27"), message)
         XCTAssertTrue(message.contains("4"), message)
-        XCTAssertEqual(result.rows.first?["Proficiency Level"], "4")
-        XCTAssertEqual(result.rows.first?["Score Detail 1"], "4")
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "4")
     }
 
     // MARK: - Grades 6-8 are excluded and flagged
@@ -75,8 +73,7 @@ final class BenchmarkScoringTests: XCTestCase {
                 converter: converter, url: url, answers: answers())
             XCTAssertEqual(result.rows.count, 1, grade)
             XCTAssertTrue(result.isClean, grade)
-            XCTAssertEqual(result.rows.first?["Proficiency Level"], "At Standard", grade)
-            XCTAssertEqual(result.rows.first?["Score Detail 1"], "At Standard", grade)
+            XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "At Standard", grade)
             XCTAssertEqual(result.notices.count, 1, grade)
             let message = try XCTUnwrap(result.notices.first?.message)
             XCTAssertTrue(message.contains("not covered by the English 2026-27 benchmark"), message)
@@ -90,7 +87,7 @@ final class BenchmarkScoringTests: XCTestCase {
         let result = try Pipeline.convertFile(
             converter: converter, url: url, answers: answers())
         XCTAssertEqual(result.rows.count, 1)
-        XCTAssertEqual(result.rows.first?["Proficiency Level"], "")
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "")
         XCTAssertEqual(result.notices.count, 1)
     }
 
@@ -115,7 +112,7 @@ final class BenchmarkScoringTests: XCTestCase {
             converter: converter, url: url, answers: answers(window: "Trimester 2"))
         XCTAssertTrue(result.isClean)
         XCTAssertTrue(result.notices.isEmpty)
-        XCTAssertEqual(result.rows.first?["Proficiency Level"], "3")
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "3")
     }
 
     // MARK: - Unrecognized / blank grade
@@ -151,7 +148,7 @@ final class BenchmarkScoringTests: XCTestCase {
             answers: answers(year: "2019-2020", language: "Spanish"))
         XCTAssertTrue(result.isClean)
         XCTAssertEqual(result.rows.first?["Assessment Name"], "Independent Reading Level Spanish")
-        XCTAssertEqual(result.rows.first?["Proficiency Level"], "3")
+        XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "3")
     }
 
     // MARK: - Scoring table summary (the persistent "Benchmark: ..." line)
