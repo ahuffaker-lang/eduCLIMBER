@@ -9,7 +9,7 @@ import EduClimberKit
 /// prompt fields and the expected columns all come from the converter, so a
 /// second assessment type appears in this window as soon as it is registered.
 final class MainWindowController: NSWindowController, NSTextFieldDelegate {
-    private let converters: [AssessmentConverter] = [RunningRecordsConverter()]
+    private let converters: [AssessmentConverter] = [RunningRecordsConverter(), HFWConverter()]
     private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
 
     // Loaded file state. Column choices are remembered per file, so confirming a

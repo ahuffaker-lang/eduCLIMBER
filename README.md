@@ -282,6 +282,16 @@ it to the `converters` array in `MainWindowController`. It appears in the assess
 menu with its own prompts, and its declared `sourceColumns` get the same
 auto-matching and "which column is this?" prompting for free.
 
+`Sources/EduClimberKit/HFWConverter.swift` is a second example, and shows a
+different shape than Running Records: instead of asking the user for the
+Assessment Window and School Year up front, a High Frequency Words export mixes
+all three administrations of the year into one file, with each row's
+`Assessment` column carrying its own window and year (e.g. `"25-26 Gr 1 HFW
+Admin #1"`) — so `prompts` is empty and `convert(...)` parses that column per
+row instead. A converter is free to get its batch-level values from wherever
+makes sense for that source format; the prompts array is for the cases where
+the user is the only source of truth for a value.
+
 ## History
 
 Earlier commits on this branch contain a Python/Tkinter implementation of the same
