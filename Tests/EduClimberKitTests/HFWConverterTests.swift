@@ -98,7 +98,9 @@ final class HFWConverterTests: XCTestCase {
     // MARK: - Validation
 
     func testBlankRequiredFieldsAreFlagged() throws {
-        let url = try writeCSV(",,,,,,,,,,,,\n")
+        // SSID (unused) carries a value so this isn't a fully blank row, which
+        // the reader drops as a spacer rather than a data row with blanks.
+        let url = try writeCSV(",,x,,,,,,,,,,\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: [:])
         let messages = result.errors.map(\.message)
         XCTAssertTrue(messages.contains { $0.contains("Student Id is blank") })
