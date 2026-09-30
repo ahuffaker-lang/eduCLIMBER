@@ -292,6 +292,19 @@ row instead. A converter is free to get its batch-level values from wherever
 makes sense for that source format; the prompts array is for the cases where
 the user is the only source of truth for a value.
 
+`Sources/EduClimberKit/EurekaMathConverter.swift` is a third example, for
+Eureka Math module assessments (grades 3-5). Its export mixes several kinds
+of assessment in one file — Module Assessments, Topic Quizzes, and interim
+assessments — identified by a `type_of_assessment` code; only rows coded
+`MA` (Module Assessment) convert, everything else is skipped without being
+flagged as a problem, since it was never meant to. It also shows
+`PromptField`'s `defaultValue`: the School Year prompt is pre-filled with
+the current academic year (computed from today's date via
+`EurekaMathConverter.currentSchoolYear()`) so the common case needs no
+typing, but stays editable for re-running an older export. Grade is
+restricted to 3-5 and Module to 1-6, matching eduCLIMBER's own "Eureka Math
+Grades 3-5" assessment setup, which has no windows outside that range.
+
 ## History
 
 Earlier commits on this branch contain a Python/Tkinter implementation of the same

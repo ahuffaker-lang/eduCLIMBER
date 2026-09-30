@@ -12,13 +12,21 @@ public struct PromptField {
     public let kind: Kind
     public let help: String
     public let placeholder: String
+    /// Pre-filled into the control when the prompt is first shown -- e.g. the
+    /// current school year, computed from today's date, so the common case
+    /// needs no typing but can still be overridden.
+    public let defaultValue: String?
 
-    public init(key: String, label: String, kind: Kind, help: String = "", placeholder: String = "") {
+    public init(
+        key: String, label: String, kind: Kind, help: String = "", placeholder: String = "",
+        defaultValue: String? = nil
+    ) {
         self.key = key
         self.label = label
         self.kind = kind
         self.help = help
         self.placeholder = placeholder
+        self.defaultValue = defaultValue
     }
 
     public var choices: [String] {
