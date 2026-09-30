@@ -297,7 +297,11 @@ Eureka Math module assessments (grades 3-5). Its export mixes several kinds
 of assessment in one file — Module Assessments, Topic Quizzes, and interim
 assessments — identified by a `type_of_assessment` code; only rows coded
 `MA` (Module Assessment) convert, everything else is skipped without being
-flagged as a problem, since it was never meant to. It also shows
+flagged as a problem, since it was never meant to. Among Module Assessment
+rows, `assessment_status` is checked separately: only `done` converts
+cleanly, while any other status (e.g. `open`) is flagged as a row problem
+for the user to review rather than skipped or silently converted, since it
+is a real row someone needs to look at, not noise. It also shows
 `PromptField`'s `defaultValue`: the School Year prompt is pre-filled with
 the current academic year (computed from today's date via
 `EurekaMathConverter.currentSchoolYear()`) so the common case needs no

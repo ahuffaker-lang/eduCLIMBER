@@ -18,9 +18,11 @@ final class EurekaMathConverterTests: XCTestCase {
     }
 
     /// A real row from the district's export (names/IDs are the actual sample
-    /// given, not placeholders).
+    /// given, not placeholders), with assessment_status changed to "done" --
+    /// the happy-path fixture for tests that expect a clean conversion.
+    /// `testOpenStatusIsFlaggedForReview` covers the original "open" status.
     let sampleMARow =
-        "3d1955fc,5143f205,634064f8,\"Grade 5, Module 1, Module Assessment 1\",open,MA,FALSE,5,1,"
+        "3d1955fc,5143f205,634064f8,\"Grade 5, Module 1, Module Assessment 1\",done,MA,FALSE,5,1,"
         + "em2cali,Christian Sorensen Elementary School,9033,\"Lawrence, Michael\","
         + "Grade 5 - Lawrence - 1,egarcia18@whittiercity.net,20212318,\"Garcia, Ethan\","
         + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n"
@@ -61,6 +63,34 @@ final class EurekaMathConverterTests: XCTestCase {
         XCTAssertTrue(result.isClean, "skipped rows are not problems")
     }
 
+    // MARK: - Filtering by assessment_status
+
+    /// A Module Assessment that is not yet "done" (the real "open" row from
+    /// the district's sample, which already carries a full score) is flagged
+    /// for review, not skipped and not converted silently.
+    func testOpenStatusIsFlaggedForReview() throws {
+        let openRow =
+            "3d1955fc,5143f205,634064f8,\"Grade 5, Module 1, Module Assessment 1\",open,MA,FALSE,"
+            + "5,1,em2cali,Christian Sorensen Elementary School,9033,\"Lawrence, Michael\","
+            + "Grade 5 - Lawrence - 1,egarcia18@whittiercity.net,20212318,\"Garcia, Ethan\","
+            + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n"
+        let url = try writeCSV(openRow)
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.rows.isEmpty)
+        XCTAssertFalse(result.isClean)
+        XCTAssertTrue(
+            result.errors.contains { $0.message.contains("not \"done\"") },
+            "\(result.errors.map(\.message))")
+    }
+
+    func testStatusMatchIsCaseInsensitive() throws {
+        let uppercase = sampleMARow.replacingOccurrences(of: ",done,MA,", with: ",DONE,MA,")
+        let url = try writeCSV(uppercase)
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.count, 1)
+    }
+
     // MARK: - Full row mapping
 
     func testFullRowMapping() throws {
@@ -89,11 +119,12 @@ final class EurekaMathConverterTests: XCTestCase {
     /// Score Detail 1 = performance_band.
     func testMatchesTheTemplatesOwnExample() throws {
         let url = try writeCSV(
-            "3d1955fc,ec5b1313,634064f8,\"Grade 5, Module 1, Module Assessment 1\",open,MA,FALSE,"
+            "3d1955fc,ec5b1313,634064f8,\"Grade 5, Module 1, Module Assessment 1\",done,MA,FALSE,"
             + "5,1,em2cali,Christian Sorensen Elementary School,9033,\"Lawrence, Michael\","
             + "Grade 5 - Lawrence - 1,schavarria53@whittiercity.net,20210953,"
             + "\"Chavarria, Sophie\",9/25/26,9/25/26,23.75,27.5,86,proficient\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
         XCTAssertEqual(result.rows.first?["Score"], "86")
         XCTAssertEqual(result.rows.first?["Score Detail 1 Proficiency Level"], "proficient")
     }
@@ -105,6 +136,7 @@ final class EurekaMathConverterTests: XCTestCase {
         let url = try writeCSV(",x,,,,MA,,,,,,,,,,,,,,,,,\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
         let messages = result.errors.map(\.message)
+        XCTAssertTrue(messages.contains { $0.contains("Assessment Status is blank") })
         XCTAssertTrue(messages.contains { $0.contains("Student Id is blank") })
         XCTAssertTrue(messages.contains { $0.contains("Student is blank") })
         XCTAssertTrue(messages.contains { $0.contains("Grade is blank") })
@@ -116,7 +148,7 @@ final class EurekaMathConverterTests: XCTestCase {
 
     func testUnparseableStudentNameIsFlagged() throws {
         let url = try writeCSV(
-            "3d1955fc,x,634064f8,x,open,MA,FALSE,5,1,x,x,9033,x,x,x,20212318,Ethan Garcia,"
+            "3d1955fc,x,634064f8,x,done,MA,FALSE,5,1,x,x,9033,x,x,x,20212318,Ethan Garcia,"
             + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
         XCTAssertTrue(
@@ -127,7 +159,7 @@ final class EurekaMathConverterTests: XCTestCase {
     /// eduCLIMBER's Windows for this assessment are only Module 1-6.
     func testModuleOutsideOneToSixIsFlagged() throws {
         let url = try writeCSV(
-            "3d1955fc,x,634064f8,x,open,MA,FALSE,5,7,x,x,9033,x,x,x,20212318,\"Garcia, Ethan\","
+            "3d1955fc,x,634064f8,x,done,MA,FALSE,5,7,x,x,9033,x,x,x,20212318,\"Garcia, Ethan\","
             + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
         XCTAssertTrue(result.errors.contains { $0.message.contains("Module 1-6 windows") })
@@ -137,7 +169,7 @@ final class EurekaMathConverterTests: XCTestCase {
     /// even though a district-wide export could in principle include them.
     func testGradeOutsideThreeToFiveIsFlagged() throws {
         let url = try writeCSV(
-            "3d1955fc,x,634064f8,x,open,MA,FALSE,2,1,x,x,9033,x,x,x,20212318,\"Garcia, Ethan\","
+            "3d1955fc,x,634064f8,x,done,MA,FALSE,2,1,x,x,9033,x,x,x,20212318,\"Garcia, Ethan\","
             + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
         XCTAssertTrue(result.errors.contains { $0.message.contains("Grades 3-5") })

@@ -6,12 +6,18 @@ import Foundation
 /// Assessments, Topic Quizzes, and (for grades 3-5) interim assessments --
 /// identified by `type_of_assessment`. Only Module Assessments ("MA") are
 /// what eduCLIMBER wants here; everything else is skipped without comment,
-/// not flagged as a problem, since it was never meant to convert.
+/// not flagged as a problem, since it was never meant to convert. Among
+/// Module Assessment rows, `assessment_status` further distinguishes a
+/// finished attempt ("done") from one still in progress -- that one *is*
+/// flagged for review rather than skipped, since it is a real row someone
+/// needs to look at, not noise.
 public struct EurekaMathConverter: AssessmentConverter {
     public static let assessmentGroup = "Eureka Math"
     public static let assessmentName = "Eureka Math Module"
     /// The only `type_of_assessment` value that converts.
     public static let moduleAssessmentTypeCode = "MA"
+    /// The only `assessment_status` value that converts without review.
+    public static let doneStatus = "done"
     /// eduCLIMBER's "Eureka Math Grades 3-5" assessment doesn't cover K-2.
     public static let supportedGrades = ["3", "4", "5"]
 
@@ -20,9 +26,11 @@ public struct EurekaMathConverter: AssessmentConverter {
     public let key = "eureka_math"
     public let displayName = "Eureka Math"
     public let summary =
-        "Eureka Math module assessment export (Type of Assessment, Grade, Module, Student Id, "
-        + "Student, Date Completed, Overall Percentage, Performance Band). Only rows marked as "
-        + "a Module Assessment (MA) are converted; quizzes and other assessment types are skipped."
+        "Eureka Math module assessment export (Type of Assessment, Assessment Status, Grade, "
+        + "Module, Student Id, Student, Date Completed, Overall Percentage, Performance Band). "
+        + "Only rows marked as a Module Assessment (MA) are converted; quizzes and other "
+        + "assessment types are skipped. A Module Assessment not yet marked \"done\" is flagged "
+        + "for review rather than converted."
 
     /// A single batch-wide value: the school year every row is stamped with.
     /// Pre-filled with the current academic year (computed from today's
@@ -40,6 +48,7 @@ public struct EurekaMathConverter: AssessmentConverter {
 
     public let sourceColumns: [SourceColumn] = [
         SourceColumn(key: "type_of_assessment", label: "Type of Assessment", example: "MA"),
+        SourceColumn(key: "assessment_status", label: "Assessment Status", example: "done"),
         SourceColumn(key: "grade", label: "Grade", example: "5"),
         SourceColumn(key: "module", label: "Module", example: "1"),
         SourceColumn(key: "student_id", label: "Student Id", aliases: ["Student ID"],
@@ -105,6 +114,7 @@ public struct EurekaMathConverter: AssessmentConverter {
                 == .orderedSame
             else { continue }
 
+            let assessmentStatus = table.value(row, header("assessment_status"))
             let studentID = table.value(row, header("student_id"))
             let student = table.value(row, header("student"))
             let rawGrade = table.value(row, header("grade"))
@@ -115,6 +125,18 @@ public struct EurekaMathConverter: AssessmentConverter {
 
             var rowProblems: [String] = []
             var name = (first: "", last: "")
+
+            // Unlike the type_of_assessment filter above, a Module Assessment
+            // that is not yet "done" is a legitimate row someone needs to look
+            // at -- it is flagged for review rather than skipped without
+            // comment, since "open" here does not simply mean "not started".
+            if assessmentStatus.caseInsensitiveCompare(Self.doneStatus) != .orderedSame {
+                rowProblems.append(
+                    assessmentStatus.isEmpty
+                        ? "Assessment Status is blank."
+                        : "Assessment Status '\(assessmentStatus)' is not \"\(Self.doneStatus)\" "
+                            + "-- flagged for review.")
+            }
 
             if studentID.isEmpty { rowProblems.append("Student Id is blank.") }
 
