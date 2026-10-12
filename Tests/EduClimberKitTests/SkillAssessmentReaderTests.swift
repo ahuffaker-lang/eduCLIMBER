@@ -30,13 +30,13 @@ final class SkillAssessmentReaderTests: XCTestCase {
         answered: String = "10", possible: String = "10", percent: String = "100.0%",
         correctQuestions: String = "a, b, c"
     ) -> [String] {
-        row([0: "\(number).", 2: name, 4: id, 5: attempts, 7: lastAssessed, 8: correct,
-             9: incorrect, 10: answered, 11: possible, 12: percent, 13: correctQuestions])
+        Self.row([0: "\(number).", 2: name, 4: id, 5: attempts, 7: lastAssessed, 8: correct,
+                  9: incorrect, 10: answered, 11: possible, 12: percent, 13: correctQuestions])
     }
 
     func footerRow(page: String = "Page 1 of 1") -> [String] {
-        row([1: "Generated on 01/01/2026 by Renaissance Learning, Inc.\nhelp.illuminateed.com",
-             14: page])
+        Self.row([1: "Generated on 01/01/2026 by Renaissance Learning, Inc.\nhelp.illuminateed.com",
+                  14: page])
     }
 
     // MARK: - Row classification
