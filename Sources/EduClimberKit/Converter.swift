@@ -5,6 +5,12 @@ public struct PromptField {
     public enum Kind {
         case choice([String])
         case text(pattern: String)
+        /// A path to a second file this batch needs (e.g. a roster to join
+        /// against). The control that renders it is responsible for putting a
+        /// real, chosen path into the answer; beyond "something was chosen",
+        /// whether that file is actually readable and shaped right is for the
+        /// converter to report when it tries to read it.
+        case file
     }
 
     public let key: String
@@ -47,6 +53,8 @@ public struct PromptField {
             guard value.range(of: pattern, options: .regularExpression) != nil else {
                 return help.isEmpty ? "\(label) is not in the expected format." : help
             }
+        case .file:
+            break  // non-empty (a path was chosen) is all that's checked here
         }
         return nil
     }
@@ -191,6 +199,13 @@ public protocol AssessmentConverter {
 
     func defaultOutputName(answers: [String: String]) -> String
 
+    /// Load `url` into the `Table` this converter maps columns against. The
+    /// default reads it as a plain spreadsheet (one header row, one record per
+    /// row); a converter whose source isn't shaped that way -- a block per
+    /// teacher rather than one row per student, say -- overrides this to do
+    /// its own parsing instead.
+    func loadSource(at url: URL) throws -> Table
+
     /// The naming pattern offered for this assessment; the user can change it.
     var defaultFileNameTemplate: String { get }
 
@@ -226,6 +241,8 @@ public struct ScoringTableSummary {
 
 extension AssessmentConverter {
     public func problems(for mapping: ColumnMapping) -> [String] { [] }
+
+    public func loadSource(at url: URL) throws -> Table { try Pipeline.loadSource(at: url) }
 
     public func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary? { nil }
 

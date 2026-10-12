@@ -64,7 +64,7 @@ public enum Pipeline {
     public static func convertFile(
         converter: AssessmentConverter, url: URL, answers: [String: String]
     ) throws -> ConversionResult {
-        let table = try loadSource(at: url)
+        let table = try converter.loadSource(at: url)
         let mapping = matchColumns(converter: converter, table: table)
         if mapping.needsConfirmation || !converter.problems(for: mapping).isEmpty {
             let extra = converter.problems(for: mapping)

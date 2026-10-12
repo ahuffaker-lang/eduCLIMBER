@@ -10,7 +10,7 @@ import EduClimberKit
 /// second assessment type appears in this window as soon as it is registered.
 final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let converters: [AssessmentConverter] = [
-        RunningRecordsConverter(), HFWConverter(), EurekaMathConverter(),
+        RunningRecordsConverter(), HFWConverter(), EurekaMathConverter(), SkillAssessmentConverter(),
     ]
     private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
 
@@ -190,6 +190,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
             let label = makeLabel("\(prompt.label):")
             label.widthAnchor.constraint(equalToConstant: 150).isActive = true
             let control: NSControl
+            let displayView: NSView
             switch prompt.kind {
             case .choice(let options):
                 let popUp = NSPopUpButton()
@@ -197,6 +198,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
                 popUp.target = self
                 popUp.action = #selector(promptChanged)
                 control = popUp
+                displayView = popUp
             case .text:
                 let field = NSTextField()
                 field.placeholderString = prompt.placeholder
@@ -204,16 +206,49 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
                 field.delegate = self
                 field.widthAnchor.constraint(equalToConstant: 160).isActive = true
                 control = field
+                displayView = field
+            case .file:
+                let field = NSTextField()
+                field.placeholderString = "No file chosen"
+                field.isEditable = false
+                field.widthAnchor.constraint(equalToConstant: 220).isActive = true
+                let chooseButton = NSButton(
+                    title: "Choose File…", target: self, action: #selector(choosePromptFile))
+                chooseButton.bezelStyle = .rounded
+                chooseButton.identifier = NSUserInterfaceItemIdentifier(prompt.key)
+                control = field
+                let group = NSStackView(views: [field, chooseButton])
+                group.orientation = .horizontal
+                group.spacing = 6
+                displayView = group
             }
             promptControls[prompt.key] = control
 
             let hint = makeLabel(prompt.help.isEmpty ? prompt.placeholder : prompt.help,
                                  secondary: true)
-            let row = NSStackView(views: [label, control, hint])
+            let row = NSStackView(views: [label, displayView, hint])
             row.orientation = .horizontal
             row.spacing = 8
             promptStack.addArrangedSubview(row)
         }
+    }
+
+    /// The button beside a `.file` prompt's field; `identifier` carries which
+    /// prompt it belongs to, since several such buttons can be on screen at
+    /// once (not true today, but `renderPrompts` doesn't assume otherwise).
+    @objc private func choosePromptFile(_ sender: NSButton) {
+        guard let key = sender.identifier?.rawValue,
+              let field = promptControls[key] as? NSTextField
+        else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Select File"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = Self.openableTypes
+        panel.allowsOtherFileTypes = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        field.stringValue = url.path
+        promptChanged()
     }
 
     /// The naming pattern is remembered per assessment, so it survives quitting.
@@ -360,7 +395,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         if table != nil && mapping != nil { return true }
         guard let sourceURL else { return false }
         do {
-            let loaded = try Pipeline.loadSource(at: sourceURL)
+            let loaded = try converter.loadSource(at: sourceURL)
             table = loaded
             mapping = Pipeline.matchColumns(converter: converter, table: loaded)
             matchColumnsButton.isEnabled = true
