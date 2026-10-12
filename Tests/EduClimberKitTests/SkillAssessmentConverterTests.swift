@@ -174,13 +174,18 @@ final class SkillAssessmentConverterTests: XCTestCase {
         XCTAssertEqual(result.rows.first?["Student Grade Level"], "K")
     }
 
+    /// Pipeline.convert() rejects a blank "aeries_file" answer as a required
+    /// prompt before SkillAssessmentConverter.convert() itself ever runs --
+    /// the same path every other required prompt here goes through.
     func testThrowsWhenAeriesFileAnswerIsMissing() {
         let table = makeTable([studentRow()])
         var noFile = answers(aeriesPath: "")
         noFile.removeValue(forKey: "aeries_file")
         XCTAssertThrowsError(try convert(table, answers: noFile)) { error in
             XCTAssertTrue(
-                (error as? ConverterError)?.message.contains("Choose the Aeries") == true)
+                (error as? ConverterError)?.message.contains("Aeries Grade/School File is required")
+                    == true,
+                (error as? ConverterError)?.message ?? "no message")
         }
     }
 

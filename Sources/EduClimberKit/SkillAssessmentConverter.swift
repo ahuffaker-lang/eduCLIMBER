@@ -108,11 +108,10 @@ public struct SkillAssessmentConverter: AssessmentConverter {
                 + "its Assessment row may be malformed.")
         }
 
-        let aeriesPath = trimmed(answers["aeries_file"])
-        guard !aeriesPath.isEmpty else {
-            throw ConverterError("Choose the Aeries grade/school file before converting.")
-        }
-        let aeriesLookup = try Self.loadAeriesLookup(path: aeriesPath)
+        // Pipeline.convert() already rejects a blank "aeries_file" answer as a
+        // required prompt before this ever runs, same as every other required
+        // prompt here -- nothing to re-check.
+        let aeriesLookup = try Self.loadAeriesLookup(path: trimmed(answers["aeries_file"]))
 
         var result = ConversionResult(columns: outputColumns)
         var seenStudentIDs = Set<String>()
