@@ -16,19 +16,23 @@ final class FormativeConverterTests: XCTestCase {
     }
 
     /// Mirrors the real roster's exact header -- Student ID, Grade, School,
-    /// StuEmail, First Name, Last Name -- even though only the first two and
-    /// StuEmail are actually used, so the matching logic is tested against
-    /// the file shape that will really be used, not a simplified stand-in.
+    /// StuEmail, First Name, Last Name. First/Last Name are blank by default
+    /// (falls back to Formative's own name, matching most tests); pass
+    /// `names` keyed by email to test the roster's name taking precedence.
     func writeRosterCSV(
         _ rows: [(email: String, id: String, grade: String)],
-        emailHeader: String = "StuEmail"
+        emailHeader: String = "StuEmail",
+        names: [String: (first: String, last: String)] = [:]
     ) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent("roster.csv")
         var text = "Student ID,Grade,School,\(emailHeader),First Name,Last Name\n"
-        for row in rows { text += "\(row.id),\(row.grade),Edwards,\(row.email),Fake,Student\n" }
+        for row in rows {
+            let name = names[row.email] ?? (first: "", last: "")
+            text += "\(row.id),\(row.grade),Edwards,\(row.email),\(name.first),\(name.last)\n"
+        }
         try text.write(to: file, atomically: true, encoding: .utf8)
         return file
     }
@@ -146,6 +150,34 @@ final class FormativeConverterTests: XCTestCase {
         let url = try writeCSV(submittedRow)
         let result = try convert(url, answers: answers(rosterPath: roster.path))
         XCTAssertNil(result.followUpReport)
+    }
+
+    // MARK: - Roster name overrides Formative's (sometimes truncated) name
+
+    func testRosterNameOverridesFormativesOwnName() throws {
+        // Formative's own export sometimes truncates a last name to a
+        // single letter (seen for real as "G, Matthew" instead of
+        // "Garcia, Matthew"); the roster is the district's own student
+        // list, so it wins whenever it has a name at all.
+        let roster = try writeRosterCSV(
+            [(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")],
+            names: ["ahernandezzepeda54@whittiercity.net": (first: "Agustin", last: "Hernandez-Zepeda")])
+        let truncatedRow = submittedRow.replacingOccurrences(
+            of: "Hernandez Zepeda,Agustin", with: "H,Agustin")
+        let url = try writeCSV(truncatedRow)
+        let result = try convert(url, answers: answers(rosterPath: roster.path))
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Hernandez-Zepeda")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Agustin")
+    }
+
+    func testFormativesNameIsUsedWhenTheRosterHasNone() throws {
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(submittedRow)
+        let result = try convert(url, answers: answers(rosterPath: roster.path))
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Hernandez Zepeda")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Agustin")
     }
 
     // MARK: - The roster join

@@ -65,12 +65,17 @@ public struct FormativeConverter: AssessmentConverter {
     /// Grade is expected already in eduCLIMBER's own form ("6", "K", "TK"),
     /// not an Aeries numeric code. "StuEmail" is the real header the actual
     /// roster uses; "Email" is kept too in case a future roster spells it
-    /// plainly.
+    /// plainly. First/Last Name are optional: the roster's version wins when
+    /// present (Formative's own name sometimes arrives truncated, e.g. "G"
+    /// instead of "Garcia"), falling back to Formative's name only when the
+    /// roster doesn't have one.
     static let rosterColumns: [SourceColumn] = [
         SourceColumn(key: "email", label: "StuEmail", aliases: ["Email", "Student Email"],
                      example: "student54@whittiercity.net"),
         SourceColumn(key: "student_id", label: "Student ID", example: "20221371"),
         SourceColumn(key: "grade", label: "Grade", example: "6"),
+        SourceColumn(key: "first_name", label: "First Name", isRequired: false, example: "Agustin"),
+        SourceColumn(key: "last_name", label: "Last Name", isRequired: false, example: "Hernandez Zepeda"),
     ]
 
     public let outputColumns = [
@@ -116,10 +121,20 @@ public struct FormativeConverter: AssessmentConverter {
             // have no email -- they were never student data to begin with.
             guard !email.isEmpty else { continue }
 
-            let lastName = table.value(row, header("last_name"))
-            let firstName = table.value(row, header("first_name"))
+            let formativeLastName = table.value(row, header("last_name"))
+            let formativeFirstName = table.value(row, header("first_name"))
             let timestamp = table.value(row, header("timestamp"))
             let percentText = table.value(row, header("score_percent"))
+
+            // The roster is the more trustworthy name source -- Formative's
+            // own Last/First name sometimes arrives truncated (e.g. "G"
+            // instead of "Garcia"), while the roster is the district's own
+            // student list -- so it wins whenever it has a name at all.
+            let rosterMatch = roster[email.lowercased()]
+            let rosterLastName = rosterMatch?.lastName ?? ""
+            let rosterFirstName = rosterMatch?.firstName ?? ""
+            let lastName = rosterLastName.isEmpty ? formativeLastName : rosterLastName
+            let firstName = rosterFirstName.isEmpty ? formativeFirstName : rosterFirstName
 
             let name = [lastName, firstName].filter { !$0.isEmpty }.joined(separator: ", ")
             let labelPrefix = "\(name.isEmpty ? email : name) — "
@@ -147,7 +162,7 @@ public struct FormativeConverter: AssessmentConverter {
 
             var studentID = ""
             var grade = ""
-            if let match = roster[email.lowercased()] {
+            if let match = rosterMatch {
                 studentID = match.studentID
                 grade = match.grade
                 if studentID.isEmpty { rowProblems.append("Roster entry for \(email) has a blank Student ID.") }
@@ -221,6 +236,8 @@ public struct FormativeConverter: AssessmentConverter {
     struct RosterMatch {
         let studentID: String
         let grade: String
+        let firstName: String
+        let lastName: String
     }
 
     static func loadRoster(path: String) throws -> [String: RosterMatch] {
@@ -240,6 +257,8 @@ public struct FormativeConverter: AssessmentConverter {
         let emailHeader = mapping.match(for: "email")?.header
         let idHeader = mapping.match(for: "student_id")?.header
         let gradeHeader = mapping.match(for: "grade")?.header
+        let firstNameHeader = mapping.match(for: "first_name")?.header
+        let lastNameHeader = mapping.match(for: "last_name")?.header
 
         var lookup: [String: RosterMatch] = [:]
         for row in rosterTable.rows {
@@ -247,7 +266,9 @@ public struct FormativeConverter: AssessmentConverter {
             guard !email.isEmpty else { continue }
             lookup[email] = RosterMatch(
                 studentID: rosterTable.value(row, idHeader),
-                grade: rosterTable.value(row, gradeHeader))
+                grade: rosterTable.value(row, gradeHeader),
+                firstName: rosterTable.value(row, firstNameHeader),
+                lastName: rosterTable.value(row, lastNameHeader))
         }
         return lookup
     }
