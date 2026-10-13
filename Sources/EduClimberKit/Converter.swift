@@ -242,6 +242,22 @@ public protocol AssessmentConverter {
     /// to be applied before converting. `nil` when the converter has no such
     /// table (the default) or the answers given so far don't yet determine one.
     func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary?
+
+    /// Rows in `table` that represent the same real submission more than
+    /// once -- e.g. one student's assignment duplicated across two class
+    /// rosters -- grouped by whatever this converter considers "the same".
+    /// Each inner array holds 0-based indices into `table.rows`; empty for a
+    /// converter that never needs this (the default) or a table with no
+    /// duplicates this time.
+    func duplicateGroups(in table: Table) -> [[Int]]
+
+    /// The columns (by header name) shown per candidate row in the duplicate
+    /// picker, so the user can tell the copies apart -- e.g. Class, Score.
+    var duplicatePickerColumns: [String] { get }
+
+    /// A short label identifying the student a duplicate group belongs to,
+    /// e.g. "Castro, Delila" -- shown once per group in the picker.
+    func duplicateGroupLabel(for table: Table, firstRowIndex: Int) -> String
 }
 
 /// What `scoringTableSummary(for:)` reports about the table in effect.
@@ -268,6 +284,12 @@ extension AssessmentConverter {
     public func loadSource(at url: URL) throws -> Table { try Pipeline.loadSource(at: url) }
 
     public func scoringTableSummary(for answers: [String: String]) -> ScoringTableSummary? { nil }
+
+    public func duplicateGroups(in table: Table) -> [[Int]] { [] }
+
+    public var duplicatePickerColumns: [String] { [] }
+
+    public func duplicateGroupLabel(for table: Table, firstRowIndex: Int) -> String { "" }
 
     public var defaultFileNameTemplate: String { "{assessment}_{window}_{year}_educlimber" }
 

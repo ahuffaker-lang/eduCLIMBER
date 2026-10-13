@@ -185,6 +185,37 @@ public struct FormativeConverter: AssessmentConverter {
         return result
     }
 
+    // MARK: - Duplicate submissions
+
+    /// Formative's own Student ID stays identical across copies of the same
+    /// real submission (the same assignment pushed through two class
+    /// rosters), so it's the right key for finding them -- unlike Email,
+    /// which this converter otherwise treats as the student's identity, this
+    /// id has nothing to do with the roster join and is only used here.
+    public func duplicateGroups(in table: Table) -> [[Int]] {
+        let idColumn = table.findColumn(["Student ID"])
+        var order: [String] = []
+        var byID: [String: [Int]] = [:]
+        for (index, row) in table.rows.enumerated() {
+            let id = table.value(row, idColumn)
+            guard !id.isEmpty else { continue }
+            if byID[id] == nil { order.append(id) }
+            byID[id, default: []].append(index)
+        }
+        return order.compactMap { byID[$0] }.filter { $0.count > 1 }
+    }
+
+    public var duplicatePickerColumns: [String] {
+        ["Class", "Teacher name", "Timestamp", "Total score (%)"]
+    }
+
+    public func duplicateGroupLabel(for table: Table, firstRowIndex: Int) -> String {
+        let row = table.rows[firstRowIndex]
+        let last = table.value(row, table.findColumn(["Last name"]))
+        let first = table.value(row, table.findColumn(["First name"]))
+        return [last, first].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
     // MARK: - The roster join
 
     struct RosterMatch {

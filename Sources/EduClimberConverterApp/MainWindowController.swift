@@ -390,13 +390,26 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         setStatus("Selected: \(url.lastPathComponent)\nClick Convert when ready.")
     }
 
-    /// Read the file and auto-match its columns. False if it could not be read.
+    /// Read the file, resolve any duplicate submissions, and auto-match
+    /// columns. False if it could not be read, or duplicates were found but
+    /// not resolved.
     @discardableResult
     private func load() -> Bool {
         if table != nil && mapping != nil { return true }
         guard let sourceURL else { return false }
         do {
-            let loaded = try converter.loadSource(at: sourceURL)
+            var loaded = try converter.loadSource(at: sourceURL)
+            let groups = converter.duplicateGroups(in: loaded)
+            if !groups.isEmpty {
+                guard let window, let selections = DuplicatePickerSheet.run(
+                    over: window, table: loaded, groups: groups,
+                    displayColumns: converter.duplicatePickerColumns, converter: converter)
+                else {
+                    setStatus("Conversion cancelled — duplicate submissions were not resolved.")
+                    return false
+                }
+                loaded = Pipeline.resolvingDuplicates(in: loaded, groups: groups, selections: selections)
+            }
             table = loaded
             mapping = Pipeline.matchColumns(converter: converter, table: loaded)
             matchColumnsButton.isEnabled = true

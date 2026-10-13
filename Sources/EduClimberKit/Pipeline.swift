@@ -33,6 +33,30 @@ public enum Pipeline {
         }
     }
 
+    /// `table` with only the chosen row kept from each duplicate group.
+    ///
+    /// `selections[i]` is the index *within* `groups[i]` the user picked, not
+    /// a row index into `table.rows` -- e.g. `selections[0] == 1` means "keep
+    /// `groups[0][1]`". Rows that aren't part of any group pass through
+    /// untouched; a converter with no duplicates never calls this at all.
+    public static func resolvingDuplicates(
+        in table: Table, groups: [[Int]], selections: [Int]
+    ) -> Table {
+        guard groups.count == selections.count else { return table }
+        var kept = Set(table.rows.indices)
+        for group in groups {
+            for index in group { kept.remove(index) }
+        }
+        for (group, selection) in zip(groups, selections) where group.indices.contains(selection) {
+            kept.insert(group[selection])
+        }
+        let order = kept.sorted()
+        return Table(
+            headers: table.headers,
+            rows: order.map { table.rows[$0] },
+            rowNumbers: order.map { table.rowNumber($0) })
+    }
+
     /// Auto-match the converter's expected columns against this file's headers.
     /// Whatever comes back needing confirmation is what to put to the user.
     public static func matchColumns(

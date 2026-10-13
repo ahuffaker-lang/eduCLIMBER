@@ -202,4 +202,47 @@ final class FormativeConverterTests: XCTestCase {
         let prompt = converter.prompts.first { $0.key == "assessment_window" }
         XCTAssertEqual(prompt?.choices, ["Test 1", "Test 2", "Test 3"])
     }
+
+    // MARK: - Duplicate submissions
+
+    /// Same Student ID and Timestamp as `submittedRow`, but pushed through a
+    /// second class roster -- exactly the real case found in the district's
+    /// export (same submission, two Class values).
+    let duplicateOfSubmittedRow =
+        "\"10/2/2026, 9:14:50 AM\",Katherine Edwards Middle,migrated-516773,Andrea St. John,"
+        + "deadbeefdeadbeefdeadbeef,P. 2 - Social Studies,"
+        + "6aa35b06dfcecc915a66a9ba,ahernandezzepeda54@whittiercity.net,Hernandez Zepeda,Agustin,"
+        + "44,3.5,8,0\n"
+
+    func testDuplicateGroupsFindsRowsSharingAStudentID() throws {
+        let url = try writeCSV(submittedRow + duplicateOfSubmittedRow)
+        let table = try converter.loadSource(at: url)
+        XCTAssertEqual(converter.duplicateGroups(in: table), [[0, 1]])
+    }
+
+    func testDuplicateGroupsIgnoresRowsWithUniqueIDs() throws {
+        let url = try writeCSV(submittedRow)
+        let table = try converter.loadSource(at: url)
+        XCTAssertEqual(converter.duplicateGroups(in: table), [])
+    }
+
+    func testDuplicateGroupsIgnoresRollupRows() throws {
+        // Rollup rows have no Student ID at all, so they must never be
+        // grouped together as if they were the same "duplicate" student.
+        let url = try writeCSV(totalsRow + schoolSubtotalRow)
+        let table = try converter.loadSource(at: url)
+        XCTAssertEqual(converter.duplicateGroups(in: table), [])
+    }
+
+    func testDuplicateGroupLabelUsesTheStudentsName() throws {
+        let url = try writeCSV(submittedRow + duplicateOfSubmittedRow)
+        let table = try converter.loadSource(at: url)
+        XCTAssertEqual(
+            converter.duplicateGroupLabel(for: table, firstRowIndex: 0), "Hernandez Zepeda, Agustin")
+    }
+
+    func testDuplicatePickerColumnsDistinguishTheCopies() {
+        XCTAssertEqual(
+            converter.duplicatePickerColumns, ["Class", "Teacher name", "Timestamp", "Total score (%)"])
+    }
 }
