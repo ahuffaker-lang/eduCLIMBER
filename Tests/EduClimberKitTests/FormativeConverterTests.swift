@@ -15,13 +15,20 @@ final class FormativeConverterTests: XCTestCase {
         return file
     }
 
-    func writeRosterCSV(_ rows: [(email: String, id: String, grade: String)]) throws -> URL {
+    /// Mirrors the real roster's exact header -- Student ID, Grade, School,
+    /// StuEmail, First Name, Last Name -- even though only the first two and
+    /// StuEmail are actually used, so the matching logic is tested against
+    /// the file shape that will really be used, not a simplified stand-in.
+    func writeRosterCSV(
+        _ rows: [(email: String, id: String, grade: String)],
+        emailHeader: String = "StuEmail"
+    ) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent("roster.csv")
-        var text = "Email,Student ID,Grade\n"
-        for row in rows { text += "\(row.email),\(row.id),\(row.grade)\n" }
+        var text = "Student ID,Grade,School,\(emailHeader),First Name,Last Name\n"
+        for row in rows { text += "\(row.id),\(row.grade),Edwards,\(row.email),Fake,Student\n" }
         try text.write(to: file, atomically: true, encoding: .utf8)
         return file
     }
@@ -89,6 +96,17 @@ final class FormativeConverterTests: XCTestCase {
 
     func testRosterEmailMatchIsCaseInsensitive() throws {
         let roster = try writeRosterCSV([(email: "AHernandezZepeda54@WhittierCity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(submittedRow)
+        let result = try convert(url, answers: answers(rosterPath: roster.path))
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student ID"], "20221371")
+    }
+
+    /// "Email" is kept as a fallback alongside the real "StuEmail" header.
+    func testRosterAcceptsPlainEmailHeaderToo() throws {
+        let roster = try writeRosterCSV(
+            [(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")],
+            emailHeader: "Email")
         let url = try writeCSV(submittedRow)
         let result = try convert(url, answers: answers(rosterPath: roster.path))
         XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")

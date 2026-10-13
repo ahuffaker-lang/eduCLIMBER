@@ -63,9 +63,12 @@ public struct FormativeConverter: AssessmentConverter {
 
     /// The roster's own columns -- built by the user for this purpose, so
     /// Grade is expected already in eduCLIMBER's own form ("6", "K", "TK"),
-    /// not an Aeries numeric code.
+    /// not an Aeries numeric code. "StuEmail" is the real header the actual
+    /// roster uses; "Email" is kept too in case a future roster spells it
+    /// plainly.
     static let rosterColumns: [SourceColumn] = [
-        SourceColumn(key: "email", label: "Email", example: "student54@whittiercity.net"),
+        SourceColumn(key: "email", label: "StuEmail", aliases: ["Email", "Student Email"],
+                     example: "student54@whittiercity.net"),
         SourceColumn(key: "student_id", label: "Student ID", example: "20221371"),
         SourceColumn(key: "grade", label: "Grade", example: "6"),
     ]
