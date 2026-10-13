@@ -11,6 +11,7 @@ import EduClimberKit
 final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let converters: [AssessmentConverter] = [
         RunningRecordsConverter(), HFWConverter(), EurekaMathConverter(), SkillAssessmentConverter(),
+        FormativeConverter(),
     ]
     private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
 
@@ -529,6 +530,12 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
             if result.skippedRowCount > 0 {
                 message += "\n\n\(result.skippedRowCount) row(s) with problems were skipped "
                     + "and are not in the file."
+            }
+            if let followUp = result.followUpReport, !followUp.rows.isEmpty {
+                let followUpURL = Pipeline.followUpReportURL(for: followUp, besideMain: url)
+                try Pipeline.saveFollowUpReport(followUp, to: followUpURL)
+                message += "\n\n\(followUp.rows.count) \(followUp.title.lowercased()) — see "
+                    + followUpURL.lastPathComponent
             }
             setStatus(message)
             showAlert(message, style: .informational)

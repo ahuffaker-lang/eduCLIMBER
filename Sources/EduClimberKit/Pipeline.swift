@@ -80,6 +80,18 @@ public enum Pipeline {
         try CSVWriter.write(columns: result.columns, rows: result.rows, to: url)
     }
 
+    /// Where a `FollowUpReport` lands: next to the main export, named after it
+    /// plus the report's own title, so the two files are obviously a pair.
+    public static func followUpReportURL(for report: FollowUpReport, besideMain url: URL) -> URL {
+        let base = url.deletingPathExtension().lastPathComponent
+        let slug = safeFileName(report.title.replacingOccurrences(of: " ", with: "_"))
+        return url.deletingLastPathComponent().appendingPathComponent("\(base)_\(slug).csv")
+    }
+
+    public static func saveFollowUpReport(_ report: FollowUpReport, to url: URL) throws {
+        try CSVWriter.write(columns: report.columns, rows: report.rows, to: url)
+    }
+
     /// Default save location: next to the source file, with a descriptive name.
     ///
     /// Pass `template` to use a naming pattern the user has set; without one the

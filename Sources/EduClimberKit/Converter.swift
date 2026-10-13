@@ -97,6 +97,24 @@ public struct RowError: Equatable {
     public var description: String { "Row \(rowNumber): \(message)" }
 }
 
+/// A separate, focused report meant to be acted on apart from the general
+/// issues list -- handed to a teacher, followed up on next week -- rather
+/// than just another line in the same problems report. For example, the
+/// students a Formative export shows as assigned but never submitted: that's
+/// still a blocking problem for the row (there's no score to upload), but
+/// the follow-up isn't "fix this file," it's "go chase down these students."
+public struct FollowUpReport: Equatable {
+    public let title: String
+    public let columns: [String]
+    public let rows: [[String: String]]
+
+    public init(title: String, columns: [String], rows: [[String: String]]) {
+        self.title = title
+        self.columns = columns
+        self.rows = rows
+    }
+}
+
 public struct ConversionResult {
     public var columns: [String]
     public var rows: [[String: String]]
@@ -106,15 +124,20 @@ public struct ConversionResult {
     /// converts (with the benchmark's value); a notice just surfaces the
     /// disagreement rather than let it pass silently.
     public var notices: [RowError]
+    /// A converter-specific report worth saving as its own file alongside the
+    /// main export. `nil` when a converter has nothing like this (the default).
+    public var followUpReport: FollowUpReport?
 
     public init(
         columns: [String], rows: [[String: String]] = [],
-        errors: [RowError] = [], notices: [RowError] = []
+        errors: [RowError] = [], notices: [RowError] = [],
+        followUpReport: FollowUpReport? = nil
     ) {
         self.columns = columns
         self.rows = rows
         self.errors = errors
         self.notices = notices
+        self.followUpReport = followUpReport
     }
 
     public var isClean: Bool { errors.isEmpty }
