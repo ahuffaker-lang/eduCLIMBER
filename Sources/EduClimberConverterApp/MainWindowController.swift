@@ -42,6 +42,12 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
             backing: .buffered,
             defer: false)
         window.title = "eduCLIMBER Assessment Converter"
+        // A hard ceiling on width: the labels inside are told how wide they
+        // may get before wrapping, but this is a backstop against the window
+        // growing to fit them anyway rather than wrapping -- height is left
+        // free, since a taller window for more Status text is genuinely useful.
+        window.minSize = NSSize(width: 680, height: 480)
+        window.maxSize = NSSize(width: 820, height: .greatestFiniteMagnitude)
         window.center()
         window.setFrameAutosaveName("MainWindow")
         self.init(window: window)
@@ -227,6 +233,9 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
 
             let hint = makeLabel(prompt.help.isEmpty ? prompt.placeholder : prompt.help,
                                  secondary: true)
+            // Narrower than makeLabel's default: this one sits in a row next
+            // to the 150pt label and a control, not alone across the box.
+            hint.preferredMaxLayoutWidth = 260
             let row = NSStackView(views: [label, displayView, hint])
             row.orientation = .horizontal
             row.spacing = 8
@@ -597,6 +606,12 @@ func makeLabel(_ text: String, secondary: Bool = false) -> NSTextField {
     let label = NSTextField(labelWithString: text)
     label.lineBreakMode = .byWordWrapping
     label.maximumNumberOfLines = 3
+    // Auto Layout's intrinsic content size ignores lineBreakMode/
+    // maximumNumberOfLines unless the field is also told how wide it's
+    // allowed to get -- without this, a long converter summary doesn't wrap,
+    // it just reports its full unwrapped width and the window grows to fit.
+    // A call site with a narrower (or wider) home overrides this afterward.
+    label.preferredMaxLayoutWidth = 640
     if secondary {
         label.textColor = .secondaryLabelColor
         label.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
