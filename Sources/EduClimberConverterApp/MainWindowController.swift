@@ -47,7 +47,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         // growing to fit them anyway rather than wrapping -- height is left
         // free, since a taller window for more Status text is genuinely useful.
         window.minSize = NSSize(width: 680, height: 480)
-        window.maxSize = NSSize(width: 820, height: .greatestFiniteMagnitude)
+        window.maxSize = NSSize(width: 820, height: CGFloat.greatestFiniteMagnitude)
         window.center()
         window.setFrameAutosaveName("MainWindow")
         self.init(window: window)
