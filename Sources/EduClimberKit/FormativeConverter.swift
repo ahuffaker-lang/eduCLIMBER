@@ -4,13 +4,18 @@ import Foundation
 ///
 /// The export mixes real student rows in with rollup rows -- a Key row, a
 /// Tags row, a Totals row, and a subtotal row per school/teacher/class --
-/// none of which carry an email address. Those are skipped without comment,
-/// the same way a Topic Quiz row is skipped in the Eureka Math export.
+/// none of which carry a Formative ID. Those are skipped without comment,
+/// the same way a Topic Quiz row is skipped in the Eureka Math export. A
+/// *real* student row can still have a blank email (Formative doesn't always
+/// have one on file), so Formative ID -- not email -- is what distinguishes
+/// a rollup row from a real one.
 ///
 /// Formative's own "Student ID" column is Formative's internal id, not the
 /// district's, so it's useless as eduCLIMBER's Student ID. The real Student
 /// ID (and Grade) instead comes from a roster file the user builds for this
-/// purpose, joined here by email address.
+/// purpose, joined here by email address -- falling back to the persisted
+/// FormativeIDMatchStore (managed in its own window) when Formative didn't
+/// supply an email for this row at all.
 ///
 /// A student the export shows as assigned but never submitted (no
 /// Timestamp, no score) is flagged as a blocking problem -- there's nothing
@@ -20,16 +25,24 @@ import Foundation
 public struct FormativeConverter: AssessmentConverter {
     public static let assessmentGroup = "Social Studies Benchmarks"
 
-    public init() {}
+    /// Where the Formative ID Matches window's saved matches live. Injectable
+    /// so tests can point at a temporary file instead of the real, shared
+    /// Application Support location.
+    private let matchStoreURL: URL
+
+    public init(matchStoreURL: URL = FormativeIDMatchStore.defaultStoreURL()) {
+        self.matchStoreURL = matchStoreURL
+    }
 
     public let key = "formative_social_studies_benchmark"
     public let displayName = "Social Studies Benchmark (Formative)"
     public let summary =
-        "Formative export (Timestamp, Email/username, Last name, First name, Total score (%)). "
-        + "Rollup rows (Key, Tags, Totals, and school/teacher/class subtotals) are skipped. "
-        + "Student ID and Grade come from a roster file joined by email, since Formative's own "
-        + "Student ID isn't the district's. A student who hasn't submitted yet is flagged and "
-        + "listed in a separate follow-up report."
+        "Formative export (Student ID, Timestamp, Email/username, Last name, First name, Total "
+        + "score (%)). Rollup rows (Key, Tags, Totals, and school/teacher/class subtotals) are "
+        + "skipped. Student ID and Grade come from a roster file joined by email, since "
+        + "Formative's own Student ID isn't the district's; a row with no email falls back to "
+        + "the Formative ID Matches window's saved matches. A student who hasn't submitted yet "
+        + "is flagged and listed in a separate follow-up report."
 
     public var prompts: [PromptField] {
         [
@@ -52,7 +65,9 @@ public struct FormativeConverter: AssessmentConverter {
     }
 
     public let sourceColumns: [SourceColumn] = [
-        SourceColumn(key: "email", label: "Email/username", example: "student54@whittiercity.net"),
+        SourceColumn(key: "formative_id", label: "Student ID", example: "6aa35b06dfcecc915a66a9ba"),
+        SourceColumn(key: "email", label: "Email/username", isRequired: false,
+                     example: "student54@whittiercity.net"),
         SourceColumn(key: "last_name", label: "Last name", example: "Hernandez Zepeda"),
         SourceColumn(key: "first_name", label: "First name", example: "Agustin"),
         SourceColumn(
@@ -109,17 +124,29 @@ public struct FormativeConverter: AssessmentConverter {
         let assessmentWindow = trimmed(answers["assessment_window"])
         let schoolYear = trimmed(answers["school_year"])
         let roster = try Self.loadRoster(path: trimmed(answers["roster_file"]))
+        let idMatches = Dictionary(
+            try FormativeIDMatchStore.load(from: matchStoreURL).map { ($0.formativeID, $0.email) },
+            uniquingKeysWith: { first, _ in first })
 
         var result = ConversionResult(columns: outputColumns)
         var notSubmitted: [[String: String]] = []
 
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
-            let email = table.value(row, header("email"))
+            let formativeID = table.value(row, header("formative_id"))
 
             // Key, Tags, Totals, and the school/teacher/class subtotal rows
-            // have no email -- they were never student data to begin with.
-            guard !email.isEmpty else { continue }
+            // have no Formative ID -- they were never student data to begin
+            // with. A real student row can still have a blank email, so
+            // email itself is no longer what distinguishes a rollup row.
+            guard !formativeID.isEmpty else { continue }
+
+            var email = table.value(row, header("email"))
+            var usedSavedMatch = false
+            if email.isEmpty, let known = idMatches[formativeID] {
+                email = known
+                usedSavedMatch = true
+            }
 
             let formativeLastName = table.value(row, header("last_name"))
             let formativeFirstName = table.value(row, header("first_name"))
@@ -130,14 +157,27 @@ public struct FormativeConverter: AssessmentConverter {
             // own Last/First name sometimes arrives truncated (e.g. "G"
             // instead of "Garcia"), while the roster is the district's own
             // student list -- so it wins whenever it has a name at all.
-            let rosterMatch = roster[email.lowercased()]
+            let rosterMatch = email.isEmpty ? nil : roster[email.lowercased()]
             let rosterLastName = rosterMatch?.lastName ?? ""
             let rosterFirstName = rosterMatch?.firstName ?? ""
             let lastName = rosterLastName.isEmpty ? formativeLastName : rosterLastName
             let firstName = rosterFirstName.isEmpty ? formativeFirstName : rosterFirstName
 
             let name = [lastName, firstName].filter { !$0.isEmpty }.joined(separator: ", ")
-            let labelPrefix = "\(name.isEmpty ? email : name) — "
+            let label = !name.isEmpty ? name : (!email.isEmpty ? email : "Formative ID \(formativeID)")
+            let labelPrefix = "\(label) — "
+
+            guard !email.isEmpty else {
+                result.errors.append(RowError(
+                    rowNumber: rowNumber,
+                    message: labelPrefix + "has no email in the export and no saved match -- "
+                        + "add one in Window > Formative ID Matches."))
+                continue
+            }
+            if usedSavedMatch {
+                result.notices.append(RowError(
+                    rowNumber: rowNumber, message: labelPrefix + "email filled in from a saved match."))
+            }
 
             guard !timestamp.isEmpty else {
                 result.errors.append(

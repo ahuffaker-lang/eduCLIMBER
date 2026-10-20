@@ -2,7 +2,13 @@ import XCTest
 @testable import EduClimberKit
 
 final class FormativeConverterTests: XCTestCase {
-    let converter = FormativeConverter()
+    // A fresh, nonexistent path per test run -- FormativeIDMatchStore treats
+    // a missing file as "no saved matches" rather than an error, and this
+    // keeps tests from ever touching the real, shared Application Support
+    // location (or each other, via UUID).
+    let converter = FormativeConverter(matchStoreURL: FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        .appendingPathComponent("formative_id_matches.csv"))
     let header = "Timestamp,Org,Teacher ID,Teacher name,Class ID,Class,Student ID,Email/username,"
         + "Last name,First name,Total score (%),Total score (points),Points possible,Q1 - Score\n"
 
@@ -53,6 +59,13 @@ final class FormativeConverterTests: XCTestCase {
         + "ELA and Social Studies - St. John,6324db286fc1109e2a623ec0,dmancera19@whittiercity.net,"
         + "Mancera,Delylah,,,,\n"
 
+    /// A real student row (Student ID present, submitted, scored) but with no
+    /// email -- Formative doesn't always have one on file. This must NOT be
+    /// treated like a rollup row.
+    let blankEmailRow = "\"10/2/2026, 9:14:50 AM\",Katherine Edwards Middle,migrated-516773,"
+        + "Andrea St. John,6a972feb3923f362ab069487,ELA and Social Studies - St. John,"
+        + "6aa35b06dfcecc915a66a9ba,,Hernandez Zepeda,Agustin,44,3.5,8,0\n"
+
     func answers(rosterPath: String) -> [String: String] {
         [
             "assessment_name": "Benchmark 1: Origins of Civilization",
@@ -62,8 +75,20 @@ final class FormativeConverterTests: XCTestCase {
         ]
     }
 
-    func convert(_ url: URL, answers: [String: String]) throws -> ConversionResult {
-        try Pipeline.convertFile(converter: converter, url: url, answers: answers)
+    func convert(
+        _ url: URL, answers: [String: String], using testConverter: FormativeConverter? = nil
+    ) throws -> ConversionResult {
+        try Pipeline.convertFile(converter: testConverter ?? converter, url: url, answers: answers)
+    }
+
+    func writeMatchStore(_ matches: [(id: String, email: String)]) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("formative_id_matches.csv")
+        try FormativeIDMatchStore.save(
+            matches.map { FormativeIDMatch(formativeID: $0.id, email: $0.email) }, to: file)
+        return file
     }
 
     // MARK: - Skipping rollup rows
@@ -74,6 +99,54 @@ final class FormativeConverterTests: XCTestCase {
         let result = try convert(url, answers: answers(rosterPath: roster.path))
         XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
         XCTAssertEqual(result.rows.count, 1)
+    }
+
+    /// A real student with a blank email must never be silently dropped the
+    /// way a genuine rollup row is -- it has to at least surface as a
+    /// flagged problem, which these next two sections exercise.
+    func testBlankEmailRowIsNotTreatedAsARollupRow() throws {
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(url, answers: answers(rosterPath: roster.path))
+        XCTAssertFalse(result.isClean, "a blank-email student should be flagged, not silently dropped")
+        XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
+    }
+
+    // MARK: - Falling back to the Formative ID Matches store
+
+    func testBlankEmailFallsBackToASavedMatch() throws {
+        let matchStore = try writeMatchStore(
+            [(id: "6aa35b06dfcecc915a66a9ba", email: "ahernandezzepeda54@whittiercity.net")])
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: roster.path),
+            using: FormativeConverter(matchStoreURL: matchStore))
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student ID"], "20221371")
+    }
+
+    func testUsingASavedMatchIsReportedAsANotice() throws {
+        let matchStore = try writeMatchStore(
+            [(id: "6aa35b06dfcecc915a66a9ba", email: "ahernandezzepeda54@whittiercity.net")])
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: roster.path),
+            using: FormativeConverter(matchStoreURL: matchStore))
+        XCTAssertTrue(
+            result.notices.contains { $0.message.contains("filled in from a saved match") },
+            "\(result.notices.map(\.message))")
+    }
+
+    func testAnUnrelatedSavedMatchDoesNotMaskAStillUnmatchedID() throws {
+        let matchStore = try writeMatchStore([(id: "some-other-id", email: "someone@whittiercity.net")])
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: roster.path),
+            using: FormativeConverter(matchStoreURL: matchStore))
+        XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
     }
 
     // MARK: - Full row mapping
