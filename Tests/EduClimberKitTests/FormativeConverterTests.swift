@@ -69,8 +69,12 @@ final class FormativeConverterTests: XCTestCase {
     /// Formative doesn't always leave this field truly blank when it has no
     /// real email on file -- a real export showed exactly this shape
     /// instead: a name fragment glued to the Formative id, no "@" anywhere.
-    let placeholderEmailRow = submittedRow.replacingOccurrences(
-        of: "ahernandezzepeda54@whittiercity.net", with: "agustinh6aa35b06dfcecc915a66a9ba")
+    /// Computed, not stored: a stored property's initializer can't reference
+    /// another instance property (submittedRow) before self exists.
+    var placeholderEmailRow: String {
+        submittedRow.replacingOccurrences(
+            of: "ahernandezzepeda54@whittiercity.net", with: "agustinh6aa35b06dfcecc915a66a9ba")
+    }
 
     func answers(rosterPath: String) -> [String: String] {
         [
