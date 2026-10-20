@@ -66,6 +66,12 @@ final class FormativeConverterTests: XCTestCase {
         + "Andrea St. John,6a972feb3923f362ab069487,ELA and Social Studies - St. John,"
         + "6aa35b06dfcecc915a66a9ba,,Hernandez Zepeda,Agustin,44,3.5,8,0\n"
 
+    /// Formative doesn't always leave this field truly blank when it has no
+    /// real email on file -- a real export showed exactly this shape
+    /// instead: a name fragment glued to the Formative id, no "@" anywhere.
+    let placeholderEmailRow = submittedRow.replacingOccurrences(
+        of: "ahernandezzepeda54@whittiercity.net", with: "agustinh6aa35b06dfcecc915a66a9ba")
+
     func answers(rosterPath: String) -> [String: String] {
         [
             "assessment_name": "Benchmark 1: Origins of Civilization",
@@ -147,6 +153,30 @@ final class FormativeConverterTests: XCTestCase {
             url, answers: answers(rosterPath: roster.path),
             using: FormativeConverter(matchStoreURL: matchStore))
         XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
+    }
+
+    // MARK: - A placeholder "email" (no @) is treated the same as a blank one
+
+    func testPlaceholderEmailFallsBackToASavedMatch() throws {
+        let matchStore = try writeMatchStore(
+            [(id: "6aa35b06dfcecc915a66a9ba", email: "ahernandezzepeda54@whittiercity.net")])
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(placeholderEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: roster.path),
+            using: FormativeConverter(matchStoreURL: matchStore))
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student ID"], "20221371")
+    }
+
+    func testPlaceholderEmailWithNoSavedMatchIsFlaggedClearlyNotAsABadRosterLookup() throws {
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(placeholderEmailRow)
+        let result = try convert(url, answers: answers(rosterPath: roster.path))
+        XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
+        XCTAssertFalse(
+            result.errors.contains { $0.message.contains("was not found in the roster") },
+            "a placeholder with no @ is 'no email', not a bad roster lookup: \(result.errors.map(\.message))")
     }
 
     // MARK: - Full row mapping

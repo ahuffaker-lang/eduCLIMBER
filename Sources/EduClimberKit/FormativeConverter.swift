@@ -142,6 +142,12 @@ public struct FormativeConverter: AssessmentConverter {
             guard !formativeID.isEmpty else { continue }
 
             var email = table.value(row, header("email"))
+            // Formative doesn't always leave this truly blank when it has no
+            // real email on file -- a real export showed rows like
+            // "gabrielh5f724d3983a325b91a14f98d" instead: a name fragment
+            // glued to the Formative id, with no "@" anywhere in it. Either
+            // shape means "no usable email," so both fall back the same way.
+            if !email.contains("@") { email = "" }
             var usedSavedMatch = false
             if email.isEmpty, let known = idMatches[formativeID] {
                 email = known
