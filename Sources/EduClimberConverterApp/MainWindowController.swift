@@ -196,6 +196,13 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
                 field.placeholderString = "No file chosen"
                 field.isEditable = false
                 field.widthAnchor.constraint(equalToConstant: 220).isActive = true
+                // Remembered from the last time this prompt's file was
+                // chosen, so a roster or roster-like file that rarely
+                // changes doesn't have to be reselected on every run.
+                if let remembered = UserDefaults.standard.string(forKey: promptFileDefaultsKey(prompt.key)),
+                   !remembered.isEmpty {
+                    field.stringValue = remembered
+                }
                 let chooseButton = NSButton(
                     title: "Choose File…", target: self, action: #selector(choosePromptFile))
                 chooseButton.bezelStyle = .rounded
@@ -235,7 +242,15 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         panel.allowsOtherFileTypes = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         field.stringValue = url.path
+        UserDefaults.standard.set(url.path, forKey: promptFileDefaultsKey(key))
         promptChanged()
+    }
+
+    /// Where a `.file` prompt's last chosen path is remembered, keyed by
+    /// both the assessment and the prompt itself, so a second `.file`
+    /// prompt on some future converter wouldn't collide with this one.
+    private func promptFileDefaultsKey(_ promptKey: String) -> String {
+        "promptFile.\(converter.key).\(promptKey)"
     }
 
     /// The naming pattern is remembered per assessment, so it survives quitting.

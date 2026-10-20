@@ -100,15 +100,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
-        let windowMenuItem = NSMenuItem()
-        let windowMenu = NSMenu(title: "Window")
+        // "Tools": the standard home for an auxiliary utility window like
+        // this one. "Window" is reserved by convention for managing open
+        // windows (minimize, zoom, bring-to-front) -- not a place anyone
+        // looks for a feature.
+        let toolsMenuItem = NSMenuItem()
+        let toolsMenu = NSMenu(title: "Tools")
         let matchesItem = NSMenuItem(
             title: "Formative ID Matches…",
             action: #selector(AppDelegate.showFormativeIDMatches), keyEquivalent: "")
         matchesItem.target = appDelegate
-        windowMenu.addItem(matchesItem)
-        windowMenuItem.submenu = windowMenu
-        mainMenu.addItem(windowMenuItem)
+        toolsMenu.addItem(matchesItem)
+        toolsMenuItem.submenu = toolsMenu
+        mainMenu.addItem(toolsMenuItem)
 
         return mainMenu
     }
