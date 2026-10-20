@@ -177,7 +177,11 @@ final class FormativeIDMatchWindowController: NSWindowController, NSTableViewDat
     @objc private func deleteSelected() {
         let indices = tableView.selectedRowIndexes
         guard !indices.isEmpty else { return }
-        matches.remove(atOffsets: indices)
+        // Removing from an array by index has to go highest-first, or each
+        // removal shifts the indices still to come out from under it.
+        for index in indices.sorted(by: >) {
+            matches.remove(at: index)
+        }
         tableView.reloadData()
         persistAndReport(message: "Deleted \(indices.count) match(es).")
     }
