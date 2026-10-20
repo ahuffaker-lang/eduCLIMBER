@@ -2,15 +2,26 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
+    private var formativeIDMatchWindowController: FormativeIDMatchWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyIconWhenRunningUnbundled()
         let controller = MainWindowController()
         windowController = controller
-        NSApp.mainMenu = Self.makeMenu(newFileTarget: controller)
+        NSApp.mainMenu = Self.makeMenu(newFileTarget: controller, appDelegate: self)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Created lazily on first use, then kept around so choosing the menu
+    /// item again just brings the same window forward instead of making a
+    /// second one (and losing whatever was already pasted into it).
+    @objc func showFormativeIDMatches() {
+        let controller = formativeIDMatchWindowController ?? FormativeIDMatchWindowController()
+        formativeIDMatchWindowController = controller
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -41,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// with New (there is otherwise no way to start a second file without
     /// quitting and reopening), and the edit commands that make the text
     /// fields behave normally.
-    static func makeMenu(newFileTarget: MainWindowController) -> NSMenu {
+    static func makeMenu(newFileTarget: MainWindowController, appDelegate: AppDelegate) -> NSMenu {
         let appName = ProcessInfo.processInfo.processName
         let mainMenu = NSMenu()
 
@@ -88,6 +99,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
+
+        let windowMenuItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        let matchesItem = NSMenuItem(
+            title: "Formative ID Matches…",
+            action: #selector(AppDelegate.showFormativeIDMatches), keyEquivalent: "")
+        matchesItem.target = appDelegate
+        windowMenu.addItem(matchesItem)
+        windowMenuItem.submenu = windowMenu
+        mainMenu.addItem(windowMenuItem)
 
         return mainMenu
     }

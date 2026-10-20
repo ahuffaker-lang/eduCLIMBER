@@ -157,29 +157,6 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         return root
     }
 
-    private func makeBox(title: String, views: [NSView]) -> NSBox {
-        let box = NSBox()
-        box.title = title
-        box.titlePosition = .atTop
-        box.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: views)
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        box.contentView = stack
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
-            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 24),
-            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
-        ])
-        for view in views {
-            view.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true
-        }
-        return box
-    }
 
     /// Build the batch-settings controls from whatever the converter declares.
     private func renderPrompts() {
@@ -617,6 +594,34 @@ func makeLabel(_ text: String, secondary: Bool = false) -> NSTextField {
         label.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
     }
     return label
+}
+
+/// A titled, bordered group of vertically-stacked views -- the standard
+/// section chrome used throughout this app's windows (Assessment, Source
+/// File, Batch Settings, and so on in the main window; Saved Matches and
+/// friends in the Formative ID Matches window).
+func makeBox(title: String, views: [NSView]) -> NSBox {
+    let box = NSBox()
+    box.title = title
+    box.titlePosition = .atTop
+    box.translatesAutoresizingMaskIntoConstraints = false
+
+    let stack = NSStackView(views: views)
+    stack.orientation = .vertical
+    stack.alignment = .leading
+    stack.spacing = 8
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    box.contentView = stack
+    NSLayoutConstraint.activate([
+        stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
+        stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+        stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 24),
+        stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
+    ])
+    for view in views {
+        view.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true
+    }
+    return box
 }
 
 /// The window's content view, so a file can be dropped anywhere on it. The
