@@ -22,10 +22,14 @@ public struct PromptField {
     /// current school year, computed from today's date, so the common case
     /// needs no typing but can still be overridden.
     public let defaultValue: String?
+    /// False for a batch setting that is genuinely optional -- e.g. a flag
+    /// column some tag upload formats don't use at all. Leaving it blank is
+    /// then not a problem; everything else still has to be filled in.
+    public let isRequired: Bool
 
     public init(
         key: String, label: String, kind: Kind, help: String = "", placeholder: String = "",
-        defaultValue: String? = nil
+        defaultValue: String? = nil, isRequired: Bool = true
     ) {
         self.key = key
         self.label = label
@@ -33,6 +37,7 @@ public struct PromptField {
         self.help = help
         self.placeholder = placeholder
         self.defaultValue = defaultValue
+        self.isRequired = isRequired
     }
 
     public var choices: [String] {
@@ -43,7 +48,7 @@ public struct PromptField {
     /// An error message, or nil when the value is acceptable.
     public func validate(_ value: String?) -> String? {
         let value = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty { return "\(label) is required." }
+        if value.isEmpty { return isRequired ? "\(label) is required." : nil }
         switch kind {
         case .choice(let options):
             guard options.contains(value) else {

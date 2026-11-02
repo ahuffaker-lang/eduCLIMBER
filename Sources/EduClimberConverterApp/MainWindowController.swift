@@ -11,7 +11,7 @@ import EduClimberKit
 final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let converters: [AssessmentConverter] = [
         RunningRecordsConverter(), HFWConverter(), EurekaMathConverter(), SkillAssessmentConverter(),
-        FormativeConverter(),
+        FormativeConverter(), TagUploadConverter(),
     ]
     private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
 
@@ -171,7 +171,8 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         promptControls = [:]
 
         for prompt in converter.prompts {
-            let label = makeLabel("\(prompt.label):")
+            let labelText = prompt.isRequired ? "\(prompt.label):" : "\(prompt.label) (optional):"
+            let label = makeLabel(labelText)
             label.widthAnchor.constraint(equalToConstant: 150).isActive = true
             let control: NSControl
             let displayView: NSView
