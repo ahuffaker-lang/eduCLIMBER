@@ -11,11 +11,16 @@ import Foundation
 /// rather than assumed to have fixed names. The name can arrive either way,
 /// the same ambiguity Running Records handles: an Aeries "Print Query to
 /// Excel" export, for instance, has one combined "Student Name" column
-/// ("Last, First"), not separate first/last columns. School Year, Tag Name,
-/// and Tag Flag are not in the source file at all -- they describe the batch
-/// as a whole, so they're typed in once and stamped onto every row. Tag Flag
-/// is the one eduCLIMBER tag-upload column not every district format
-/// actually uses, so it's the one prompt here that can be left blank.
+/// ("Last, First"), not separate first/last columns. The same kind of query
+/// can also list one student more than once (e.g. separate rows per
+/// enrollment segment) even though a tag upload only wants the student
+/// tagged once, so rows are deduplicated by Student ID -- first row for a
+/// given ID wins, later ones are dropped with a notice rather than exported
+/// again. School Year, Tag Name, and Tag Flag are not in the source file at
+/// all -- they describe the batch as a whole, so they're typed in once and
+/// stamped onto every row. Tag Flag is the one eduCLIMBER tag-upload column
+/// not every district format actually uses, so it's the one prompt here
+/// that can be left blank.
 public struct TagUploadConverter: AssessmentConverter {
     public init() {}
 
@@ -25,9 +30,10 @@ public struct TagUploadConverter: AssessmentConverter {
         "Builds an eduCLIMBER tag upload (Student ID, Student First Name, Student Last Name, "
         + "School Year, Tag Name, Tag Flag) from any file that has a Student ID and a name -- "
         + "either a combined 'Student Name' column ('Last, First') or separate first/last name "
-        + "columns -- whatever else it contains, and whatever those columns are called. School "
-        + "Year and Tag Name are typed in once for the whole batch; Tag Flag is also typed in "
-        + "and can be left blank for a tag format that doesn't use one."
+        + "columns -- whatever else it contains, and whatever those columns are called. Rows "
+        + "repeating the same Student ID are deduplicated, keeping the first. School Year and "
+        + "Tag Name are typed in once for the whole batch; Tag Flag is also typed in and can be "
+        + "left blank for a tag format that doesn't use one."
 
     public var prompts: [PromptField] {
         [
@@ -123,9 +129,28 @@ public struct TagUploadConverter: AssessmentConverter {
         let tagFlag = trimmed(answers["tag_flag"])
 
         var result = ConversionResult(columns: outputColumns)
+        var seenStudentIDs: Set<String> = []
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
             let studentID = table.value(row, header("student_id"))
+
+            // A query that lists one enrollment segment per row can repeat the
+            // same student; a tag upload only wants them tagged once. The
+            // first row for a given ID wins, matching whichever row happened
+            // to come first in the source sheet. A blank ID isn't a real key,
+            // so blank rows are never considered duplicates of each other --
+            // each is its own "Student ID is blank" problem below.
+            if !studentID.isEmpty {
+                if seenStudentIDs.contains(studentID) {
+                    result.notices.append(RowError(
+                        rowNumber: rowNumber,
+                        message: "Student ID \(studentID) — duplicate of an earlier row; "
+                            + "this row was skipped."))
+                    continue
+                }
+                seenStudentIDs.insert(studentID)
+            }
+
             let student = table.value(row, combinedHeader)
 
             var rowProblems: [String] = []

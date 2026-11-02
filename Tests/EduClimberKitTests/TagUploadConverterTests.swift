@@ -179,6 +179,50 @@ final class TagUploadConverterTests: XCTestCase {
         }
     }
 
+    // MARK: - Duplicate Student IDs are removed
+
+    /// A query listing one row per enrollment segment can repeat a student;
+    /// a tag upload should only tag them once.
+    func testDuplicateStudentIDRowsAreSkipped() throws {
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            "20212318,Ethan,Garcia\n20212319,Ava,Smith\n20212318,Ethan,Garcia")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.count, 2)
+        XCTAssertEqual(result.rows.map { $0["Student ID"] }, ["20212318", "20212319"])
+        // The duplicate is the third data row -- row 4, counting the header.
+        XCTAssertEqual(result.notices.count, 1)
+        XCTAssertEqual(result.notices.first?.rowNumber, 4)
+        XCTAssertTrue(
+            result.notices.first?.message.contains("20212318") ?? false,
+            "\(result.notices)")
+    }
+
+    /// The first row for a repeated ID wins, whatever a later copy says.
+    func testFirstOccurrenceWinsWhenDuplicateRowsDisagree() throws {
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            "20212318,Ethan,Garcia\n20212318,Mistyped,Name")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Ethan")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Garcia")
+    }
+
+    /// A blank Student ID isn't a real key -- two blank-ID rows are two
+    /// separate problems, not duplicates of each other.
+    func testBlankStudentIDRowsAreNotTreatedAsDuplicates() throws {
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            ",Ethan,Garcia\n,Ava,Smith")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.rows.isEmpty)
+        XCTAssertEqual(
+            result.errors.filter { $0.message.contains("Student ID is blank") }.count, 2)
+        XCTAssertFalse(result.notices.contains { $0.message.contains("duplicate") })
+    }
+
     func testEmptySourceFileThrows() throws {
         let url = try writeCSV("Student ID,Student First Name,Student Last Name", "")
         XCTAssertThrowsError(
