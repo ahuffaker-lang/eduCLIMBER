@@ -14,6 +14,20 @@ final class SpreadsheetReadingTests: XCTestCase {
             .appendingPathComponent("Fixtures/sample_export.xlsx")
     }
 
+    /// An Aeries "Print Query to Excel" export: a real .xlsx, but one that
+    /// binds the spreadsheetML namespace to an explicit "x:" prefix on every
+    /// element instead of leaving it as the default namespace the way real
+    /// Excel always does. Built synthetically (not from a real district
+    /// export) but byte-for-byte the same part layout and naming -- a lone
+    /// `xl/worksheets/sheet.xml` rather than `sheet1.xml`, chosen via
+    /// workbook.xml's own relationship rather than the conventional name.
+    var namespacePrefixedFixtureURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/aeries_print_query_export.xlsx")
+    }
+
     // MARK: - CSV
 
     func testQuotedFieldsAndEmbeddedCommas() {
@@ -74,6 +88,34 @@ final class SpreadsheetReadingTests: XCTestCase {
             result.errors[0].message.contains("'QQ' is not in the reading level table"),
             result.errors[0].message)
         XCTAssertEqual(table.firstDataRowNumber, 2)
+    }
+
+    /// The bug an Aeries "Print Query to Excel" export surfaced: workbook.xml,
+    /// sharedStrings.xml, and the worksheet itself all use "x:sheet", "x:si",
+    /// "x:row", etc., and the worksheet part is named plain "sheet.xml" --
+    /// found only by following workbook.xml's own relationship, since it
+    /// doesn't match the "sheet1.xml" fallback either. Every one of those has
+    /// to work for this file to read at all.
+    func testNamespacePrefixedXLSXConverts() throws {
+        let table = try XLSXReader.read(contentsOf: namespacePrefixedFixtureURL)
+        XCTAssertEqual(
+            table.headers,
+            ["School", "Grade", "Student Name", "Student ID", "Start Dt", "End Dt"])
+        XCTAssertEqual(table.rows.count, 2)
+        XCTAssertEqual(table.value(table.rows[0], "School"), "Test Elementary")
+        XCTAssertEqual(table.value(table.rows[0], "Grade"), "3")
+        XCTAssertEqual(table.value(table.rows[0], "Student Name"), "Smith, Jordan")
+        // A numeric cell must not arrive as "900001.0".
+        XCTAssertEqual(table.value(table.rows[0], "Student ID"), "900001")
+        // Excel omits a blank trailing cell (End Dt here); row 3 is unaffected.
+        XCTAssertEqual(table.value(table.rows[0], "End Dt"), "")
+        XCTAssertEqual(table.value(table.rows[1], "Student Name"), "Doe, Casey")
+        XCTAssertEqual(table.value(table.rows[1], "End Dt"), "6/10/2027")
+    }
+
+    func testNamespacePrefixedWorksheetPathIsFollowedByRelationship() throws {
+        let archive = try ZipArchive(contentsOf: namespacePrefixedFixtureURL)
+        XCTAssertEqual(try XLSXReader.firstWorksheetPath(archive), "xl/worksheets/sheet.xml")
     }
 
     func testColumnIndexFromCellReference() {

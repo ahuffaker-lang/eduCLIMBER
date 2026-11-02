@@ -1,5 +1,21 @@
 import Foundation
 
+/// The part of an element name after any namespace prefix: "x:sheet" -> "sheet".
+///
+/// Real Excel always binds the spreadsheetML namespace as the *default*
+/// (unprefixed) namespace, so every element name is already bare. Not every
+/// generator does: an Aeries "Print Query to Excel" export binds it to an
+/// explicit `x:` prefix instead and uses it on every single element, which is
+/// valid XML but means a bare-name match like `elementName == "sheet"` never
+/// fires. `XMLParser` (with namespace processing off, the default used
+/// everywhere here) hands back the qualified name including that prefix, so
+/// comparing by local name instead means it doesn't matter which prefix -- or
+/// none -- a given export happens to use.
+private func localName(_ elementName: String) -> String {
+    guard let colon = elementName.lastIndex(of: ":") else { return elementName }
+    return String(elementName[elementName.index(after: colon)...])
+}
+
 /// Small XMLParser helpers for the handful of parts an .xlsx export needs.
 enum SimpleXML {
     /// Attributes of every element with the given name, in document order.
@@ -44,9 +60,7 @@ private final class ElementCollector: NSObject, XMLParserDelegate {
         qualifiedName: String?,
         attributes: [String: String] = [:]
     ) {
-        // Compare on the qualified name too: workbook parts use r:id, and the
-        // element itself may or may not carry a namespace prefix.
-        if elementName == name || qualifiedName == name {
+        if localName(elementName) == name {
             found.append(attributes)
         }
     }
@@ -65,7 +79,7 @@ private final class SharedStringCollector: NSObject, XMLParserDelegate {
         qualifiedName: String?,
         attributes: [String: String] = [:]
     ) {
-        switch elementName {
+        switch localName(elementName) {
         case "si":
             insideItem = true
             current = ""
@@ -86,7 +100,7 @@ private final class SharedStringCollector: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName: String?
     ) {
-        switch elementName {
+        switch localName(elementName) {
         case "si":
             strings.append(current)
             insideItem = false
@@ -121,7 +135,7 @@ private final class SheetCollector: NSObject, XMLParserDelegate {
         qualifiedName: String?,
         attributes: [String: String] = [:]
     ) {
-        switch elementName {
+        switch localName(elementName) {
         case "row":
             row = []
             if let reference = attributes["r"], let number = Int(reference) {
@@ -154,7 +168,7 @@ private final class SheetCollector: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName: String?
     ) {
-        switch elementName {
+        switch localName(elementName) {
         case "v":
             insideValue = false
         case "t":

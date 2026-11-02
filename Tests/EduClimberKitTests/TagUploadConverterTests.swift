@@ -120,15 +120,62 @@ final class TagUploadConverterTests: XCTestCase {
             result.errors.contains { $0.message.contains("Student Last Name is blank") })
     }
 
-    func testMissingRequiredColumnIsReported() throws {
+    func testMissingStudentIDColumnIsReported() throws {
         let url = try writeCSV(
-            "Student ID,Student First Name",
-            "20212318,Ethan")
+            "Student First Name,Student Last Name",
+            "Ethan,Garcia")
+        XCTAssertThrowsError(
+            try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        ) { error in
+            XCTAssertTrue(error.localizedDescription.contains("Student ID"), "\(error)")
+        }
+    }
+
+    // MARK: - The name can arrive combined or split
+
+    /// An Aeries "Print Query to Excel" export, for one, has a single
+    /// "Student Name" column ("Last, First") rather than separate first and
+    /// last name columns -- the same ambiguity Running Records already
+    /// handles, so Tag Upload has to handle it too.
+    func testCombinedStudentNameColumnIsSplit() throws {
+        let url = try writeCSV(
+            "Student ID,Student Name",
+            "20212318,\"Garcia, Ethan\"")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Ethan")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Garcia")
+    }
+
+    /// Split columns win when a file somehow has both -- no parsing needed
+    /// when the source already did the work.
+    func testSplitColumnsAreUsedOverACombinedColumnWhenBothArePresent() throws {
+        let url = try writeCSV(
+            "Student ID,Student Name,Student First Name,Student Last Name",
+            "20212318,\"Wrong, Name\",Ethan,Garcia")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Ethan")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Garcia")
+    }
+
+    func testCombinedNameNotInLastFirstFormatIsFlagged() throws {
+        let url = try writeCSV(
+            "Student ID,Student Name",
+            "20212318,Ethan Garcia")
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.rows.isEmpty)
+        XCTAssertTrue(
+            result.errors.contains { $0.message.contains("is not in 'Last, First' format") })
+    }
+
+    func testNeitherCombinedNorSplitNameThrows() throws {
+        let url = try writeCSV("Student ID", "20212318")
         XCTAssertThrowsError(
             try Pipeline.convertFile(converter: converter, url: url, answers: answers())
         ) { error in
             XCTAssertTrue(
-                error.localizedDescription.contains("Student Last Name"), "\(error)")
+                error.localizedDescription.contains("needs the student name"), "\(error)")
         }
     }
 
