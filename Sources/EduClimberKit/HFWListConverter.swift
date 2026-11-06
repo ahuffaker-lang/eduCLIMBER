@@ -178,6 +178,11 @@ public struct HFWListConverter: AssessmentConverter {
         return result
     }
 
+    public func defaultOutputName(answers: [String: String]) -> String {
+        let tokens = FileNameTemplate.tokens(converter: self, answers: answers)
+        return FileNameTemplate(defaultFileNameTemplate).render(tokens: tokens)
+    }
+
     private func trimmed(_ value: String?) -> String {
         (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
