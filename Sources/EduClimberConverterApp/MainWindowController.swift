@@ -11,7 +11,7 @@ import EduClimberKit
 final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let converters: [AssessmentConverter] = [
         RunningRecordsConverter(), HFWConverter(), EurekaMathConverter(), SkillAssessmentConverter(),
-        FormativeConverter(), TagUploadConverter(),
+        FormativeConverter(), TagUploadConverter(), HFWListConverter(),
     ]
     private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
 
