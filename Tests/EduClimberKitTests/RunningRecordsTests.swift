@@ -94,6 +94,25 @@ final class RunningRecordsTests: XCTestCase {
         ])
     }
 
+    // MARK: - Student Roster fallback
+
+    func testBlankStudentNameIsFilledFromTheStudentRoster() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "123456", firstName: "Maria", lastName: "Gomez")],
+            to: rosterURL)
+        let converterWithRoster = RunningRecordsConverter(rosterStoreURL: rosterURL)
+
+        let url = try writeCSV(",123456,3,P,\n")
+        let result = try Pipeline.convertFile(
+            converter: converterWithRoster, url: url, answers: answers)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Maria")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Gomez")
+    }
+
     func testHeadersMatchLooselyAndCaseInsensitively() throws {
         let loose = "  STUDENT ,student_id,grade level,Reading Level A-Z,proficiency level\n"
         let url = try writeCSV("\"Gomez, Maria\",7,2,C,At Standard\n", header: loose)

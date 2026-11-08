@@ -32,7 +32,10 @@ final class HFWListConverterTests: XCTestCase {
         ]
     }
 
-    func convert(_ table: Table, answers: [String: String]) throws -> ConversionResult {
+    func convert(
+        _ table: Table, answers: [String: String], using testConverter: HFWListConverter? = nil
+    ) throws -> ConversionResult {
+        let converter = testConverter ?? self.converter
         let mapping = Pipeline.matchColumns(converter: converter, table: table)
         return try Pipeline.convert(converter: converter, table: table, answers: answers, mapping: mapping)
     }
@@ -138,6 +141,22 @@ final class HFWListConverterTests: XCTestCase {
         XCTAssertTrue(
             result.errors.contains { $0.message.contains("isn't in the Name Fixes table") },
             "\(result.errors.map(\.message))")
+    }
+
+    // MARK: - Student Roster fallback
+
+    func testStudentRosterFirstNameTakesPriorityOverTheHardcodedNameFixesTable() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "20222971", firstName: "FromRoster")], to: rosterURL)
+        let converterWithRoster = HFWListConverter(rosterStoreURL: rosterURL)
+
+        let table = makeTable([studentRow(name: "Copado Cuevas, ", id: "20222971")])
+        let result = try convert(table, answers: answers(), using: converterWithRoster)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "FromRoster")
     }
 
     // MARK: - Batch-wide prompts

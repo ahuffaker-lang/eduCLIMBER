@@ -32,9 +32,17 @@ public struct FormativeConverter: AssessmentConverter {
     /// so tests can point at a temporary file instead of the real, shared
     /// Application Support location.
     private let matchStoreURL: URL
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
 
-    public init(matchStoreURL: URL = FormativeIDMatchStore.defaultStoreURL()) {
+    public init(
+        matchStoreURL: URL = FormativeIDMatchStore.defaultStoreURL(),
+        rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()
+    ) {
         self.matchStoreURL = matchStoreURL
+        self.rosterStoreURL = rosterStoreURL
     }
 
     public let key = "formative_social_studies_benchmark"
@@ -135,6 +143,9 @@ public struct FormativeConverter: AssessmentConverter {
         let idMatches = Dictionary(
             try FormativeIDMatchStore.load(from: matchStoreURL).map { ($0.formativeID, $0.email) },
             uniquingKeysWith: { first, _ in first })
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let sharedRoster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
 
         var result = ConversionResult(columns: outputColumns)
         var notSubmitted: [[String: String]] = []
@@ -214,13 +225,27 @@ public struct FormativeConverter: AssessmentConverter {
                 rowProblems.append("Total score (%) '\(percentText)' is not a number.")
             }
 
+            // If the per-batch roster is missing this email entirely, or has
+            // it but with a blank Student ID or Grade, the shared Student
+            // Roster is checked next -- it's where a fix made from the
+            // review window (or the Student Roster window directly) ends up.
+            let sharedMatch = sharedRoster.entry(forEmail: email)
             var studentID = ""
             var grade = ""
             if let match = rosterMatch {
-                studentID = match.studentID
-                grade = match.grade
+                studentID = match.studentID.isEmpty ? (sharedMatch?.studentID ?? "") : match.studentID
+                grade = match.grade.isEmpty ? (sharedMatch?.grade ?? "") : match.grade
                 if studentID.isEmpty { rowProblems.append("Roster entry for \(email) has a blank Student ID.") }
                 if grade.isEmpty { rowProblems.append("Roster entry for \(email) has a blank Grade.") }
+            } else if let sharedMatch, !sharedMatch.isBlank {
+                studentID = sharedMatch.studentID
+                grade = sharedMatch.grade
+                if studentID.isEmpty {
+                    rowProblems.append("No Student ID on file in the Student Roster for \(email) either.")
+                }
+                if grade.isEmpty {
+                    rowProblems.append("No Grade on file in the Student Roster for \(email) either.")
+                }
             } else {
                 rowProblems.append("Email \(email) was not found in the roster file.")
             }

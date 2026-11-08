@@ -3,6 +3,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
     private var formativeIDMatchWindowController: FormativeIDMatchWindowController?
+    private var studentRosterWindowController: StudentRosterWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyIconWhenRunningUnbundled()
@@ -20,6 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showFormativeIDMatches() {
         let controller = formativeIDMatchWindowController ?? FormativeIDMatchWindowController()
         formativeIDMatchWindowController = controller
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Same lazy-singleton pattern as the Formative ID Matches window.
+    @objc func showStudentRoster() {
+        let controller = studentRosterWindowController ?? StudentRosterWindowController()
+        studentRosterWindowController = controller
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
     }
@@ -111,6 +120,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(AppDelegate.showFormativeIDMatches), keyEquivalent: "")
         matchesItem.target = appDelegate
         toolsMenu.addItem(matchesItem)
+        let rosterItem = NSMenuItem(
+            title: "Student Roster…",
+            action: #selector(AppDelegate.showStudentRoster), keyEquivalent: "")
+        rosterItem.target = appDelegate
+        toolsMenu.addItem(rosterItem)
         toolsMenuItem.submenu = toolsMenu
         mainMenu.addItem(toolsMenuItem)
 

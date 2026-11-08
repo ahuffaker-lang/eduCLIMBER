@@ -12,7 +12,14 @@ import Foundation
 /// eduCLIMBER's columns here -- it would only matter for a per-school report
 /// this converter doesn't build.
 public struct SkillAssessmentConverter: AssessmentConverter {
-    public init() {}
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
+
+    public init(rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()) {
+        self.rosterStoreURL = rosterStoreURL
+    }
 
     public let key = "skill_assessment"
     public let displayName = "Skill Assessment (Letter ID, Letter Sounds, etc.)"
@@ -113,6 +120,10 @@ public struct SkillAssessmentConverter: AssessmentConverter {
         // prompt here -- nothing to re-check.
         let aeriesLookup = try Self.loadAeriesLookup(path: trimmed(answers["aeries_file"]))
 
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
+
         var result = ConversionResult(columns: outputColumns)
         var seenStudentIDs = Set<String>()
 
@@ -136,14 +147,31 @@ public struct SkillAssessmentConverter: AssessmentConverter {
                 rowProblems.append("Student ID \(studentID) appears more than once in this file.")
             }
 
+            var parsed = (first: "", last: "")
+            if !studentName.isEmpty, studentName.contains(",") {
+                parsed = RunningRecordsConverter.splitStudentName(studentName)
+            }
+            // Student Roster fixes are checked first (user-editable, so a
+            // correction made here or in the review window takes effect
+            // immediately); the hardcoded Name Fixes table is still the
+            // fallback of last resort for cases fixed before this existed.
+            let filledName = roster.fill(
+                studentID: studentID, firstName: parsed.first, lastName: parsed.last)
+            name.last = filledName.lastName
+            name.first = filledName.firstName.isEmpty
+                ? (SkillAssessmentReferenceData.nameFixes[studentID] ?? "")
+                : filledName.firstName
+
             if studentName.isEmpty {
-                rowProblems.append("Student Name is blank.")
+                if name.first.isEmpty && name.last.isEmpty {
+                    rowProblems.append("Student Name is blank.")
+                }
             } else if !studentName.contains(",") {
-                rowProblems.append("Student Name '\(studentName)' is not in 'Last, First' format.")
+                if name.first.isEmpty || name.last.isEmpty {
+                    rowProblems.append(
+                        "Student Name '\(studentName)' is not in 'Last, First' format.")
+                }
             } else {
-                let parsed = RunningRecordsConverter.splitStudentName(studentName)
-                name.last = parsed.last
-                name.first = SkillAssessmentReferenceData.nameFixes[studentID] ?? parsed.first
                 if name.last.isEmpty {
                     rowProblems.append("Student Name '\(studentName)' is missing a last name.")
                 }
@@ -175,6 +203,10 @@ public struct SkillAssessmentConverter: AssessmentConverter {
                         "School code '\(match.rawSchool)' for Student ID \(studentID) is not "
                         + "recognized.")
                 }
+            } else if let rosterGrade = roster.entry(forID: studentID)?.grade, !rosterGrade.isEmpty {
+                // Not in the Aeries file at all, but the Student Roster has a
+                // grade on file for them from an earlier fix.
+                grade = rosterGrade
             } else {
                 rowProblems.append(
                     "Student ID \(studentID) was not found in the Aeries grade/school file.")

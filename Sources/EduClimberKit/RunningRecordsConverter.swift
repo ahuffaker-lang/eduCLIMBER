@@ -21,7 +21,14 @@ public struct RunningRecordsConverter: AssessmentConverter {
     public static let languages = ["English", "Spanish"]
     public static let schoolYearPattern = "^[0-9]{4}-[0-9]{4}$"
 
-    public init() {}
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
+
+    public init(rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()) {
+        self.rosterStoreURL = rosterStoreURL
+    }
 
     public let key = "running_records"
     public let displayName = "Running Records"
@@ -152,12 +159,16 @@ public struct RunningRecordsConverter: AssessmentConverter {
             throw ConverterError("Unrecognized Assessment Window '\(window)'.")
         }
 
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
+
         var result = ConversionResult(columns: outputColumns)
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
             let student = table.value(row, header("student"))
-            let studentID = table.value(row, header("student_id"))
-            let grade = table.value(row, header("grade"))
+            let rawStudentID = table.value(row, header("student_id"))
+            let rawGrade = table.value(row, header("grade"))
             let readingLevel = table.value(row, header("reading_level"))
             let proficiency = table.value(row, header("proficiency"))
 
@@ -169,17 +180,31 @@ public struct RunningRecordsConverter: AssessmentConverter {
             if useSplitNames && !(splitFirst.isEmpty && splitLast.isEmpty) {
                 // Already split by the source system: use the values as they are.
                 name = (first: splitFirst, last: splitLast)
-                if splitFirst.isEmpty { rowProblems.append("First Name is blank.") }
-                if splitLast.isEmpty { rowProblems.append("Last Name is blank.") }
             } else if !student.isEmpty {
                 // One combined column: "Last, First".
                 name = Self.splitStudentName(student)
-                if !student.contains(",") {
-                    rowProblems.append("Student name '\(student)' is not in 'Last, First' format.")
-                } else if name.first.isEmpty || name.last.isEmpty {
-                    rowProblems.append("Student name '\(student)' is missing a first or last name.")
+            }
+
+            // A row with no usable name or grade can still have a Student ID
+            // -- the Student Roster's fallback for exactly that, remembered
+            // from fixing the same gap on an earlier file.
+            let filled = roster.fill(
+                studentID: rawStudentID, firstName: name.first, lastName: name.last, grade: rawGrade)
+            let studentID = filled.studentID
+            let grade = filled.grade
+            name = (first: filled.firstName, last: filled.lastName)
+
+            if useSplitNames && !(splitFirst.isEmpty && splitLast.isEmpty) {
+                if name.first.isEmpty { rowProblems.append("First Name is blank.") }
+                if name.last.isEmpty { rowProblems.append("Last Name is blank.") }
+            } else if !student.isEmpty {
+                if name.first.isEmpty || name.last.isEmpty {
+                    rowProblems.append(
+                        student.contains(",")
+                            ? "Student name '\(student)' is missing a first or last name."
+                            : "Student name '\(student)' is not in 'Last, First' format.")
                 }
-            } else {
+            } else if name.first.isEmpty && name.last.isEmpty {
                 rowProblems.append("Student name is blank.")
             }
             if studentID.isEmpty {

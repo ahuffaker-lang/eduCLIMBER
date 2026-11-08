@@ -309,6 +309,34 @@ final class FormativeConverterTests: XCTestCase {
         }
     }
 
+    // MARK: - Student Roster fallback
+
+    /// An email missing from the per-batch roster file isn't automatically a
+    /// dead end -- the shared Student Roster (fed by "Fix & Remember…" in a
+    /// review window, or the Student Roster window directly) is checked next.
+    func testEmailNotInPerBatchRosterFallsBackToTheSharedStudentRoster() throws {
+        let rosterStoreURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(
+                studentID: "20221371", email: "ahernandezzepeda54@whittiercity.net", grade: "6")],
+            to: rosterStoreURL)
+        let converterWithRoster = FormativeConverter(
+            matchStoreURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                .appendingPathComponent("formative_id_matches.csv"),
+            rosterStoreURL: rosterStoreURL)
+
+        let emptyRoster = try writeRosterCSV([])
+        let url = try writeCSV(submittedRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: emptyRoster.path), using: converterWithRoster)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student ID"], "20221371")
+        XCTAssertEqual(result.rows.first?["Student Grade Level"], "6")
+    }
+
     // MARK: - Score parsing
 
     func testScoreIsTheBarePercentNumber() throws {

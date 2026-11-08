@@ -175,6 +175,25 @@ final class EurekaMathConverterTests: XCTestCase {
         XCTAssertTrue(result.errors.contains { $0.message.contains("Grades 3-5") })
     }
 
+    // MARK: - Student Roster fallback
+
+    func testBlankStudentNameIsFilledFromTheStudentRoster() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "20212318", firstName: "Ethan", lastName: "Garcia")],
+            to: rosterURL)
+        let converterWithRoster = EurekaMathConverter(rosterStoreURL: rosterURL)
+
+        let blankName = sampleMARow.replacingOccurrences(of: "\"Garcia, Ethan\"", with: "")
+        let url = try writeCSV(blankName)
+        let result = try Pipeline.convertFile(converter: converterWithRoster, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Ethan")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Garcia")
+    }
+
     // MARK: - School Year prompt defaults to the current academic year
 
     func testSchoolYearPromptDefaultsToCurrentAcademicYear() {

@@ -503,6 +503,14 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
                 guard let window else { return }
                 let decision = ReviewIssuesSheet.run(
                     over: window, result: converted, fileName: name)
+                if decision == .retryConversion {
+                    // A fix just saved to the Student Roster only takes effect
+                    // on the next pass -- re-run from the top so the converter
+                    // picks it up, same table and mapping already in hand.
+                    setStatus("Student Roster updated — converting \(name) again…")
+                    convert()
+                    return
+                }
                 guard decision == .skipAndContinue, converted.hasUsableRows else {
                     setStatus(
                         "Conversion cancelled — nothing was exported.\n"

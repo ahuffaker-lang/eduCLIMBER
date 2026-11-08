@@ -12,7 +12,14 @@ public struct HFWConverter: AssessmentConverter {
     public static let assessmentGroup = "High Frequency Words"
     public static let assessmentName = "HFW"
 
-    public init() {}
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
+
+    public init(rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()) {
+        self.rosterStoreURL = rosterStoreURL
+    }
 
     public let key = "hfw"
     public let displayName = "HFW"
@@ -79,14 +86,23 @@ public struct HFWConverter: AssessmentConverter {
             throw ConverterError("The source file has a header row but no student rows.")
         }
 
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
+
         var result = ConversionResult(columns: outputColumns)
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
             let assessment = table.value(row, header("assessment"))
-            let studentID = table.value(row, header("student_id"))
-            let firstName = table.value(row, header("first_name"))
-            let lastName = table.value(row, header("last_name"))
-            let rawGrade = table.value(row, header("grade"))
+            let filled = roster.fill(
+                studentID: table.value(row, header("student_id")),
+                firstName: table.value(row, header("first_name")),
+                lastName: table.value(row, header("last_name")),
+                grade: table.value(row, header("grade")))
+            let studentID = filled.studentID
+            let firstName = filled.firstName
+            let lastName = filled.lastName
+            let rawGrade = filled.grade
             let percentCorrect = table.value(row, header("percent_correct"))
             let performanceBand = table.value(row, header("performance_band"))
             let performanceBandLevel = table.value(row, header("performance_band_level"))

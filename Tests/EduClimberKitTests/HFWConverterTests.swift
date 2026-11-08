@@ -134,6 +134,24 @@ final class HFWConverterTests: XCTestCase {
         XCTAssertTrue(result.errors.contains { $0.message.contains("is not recognized") })
     }
 
+    // MARK: - Student Roster fallback
+
+    func testBlankGradeIsFilledFromTheStudentRoster() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "2021xxx", grade: "2")], to: rosterURL)
+        let converterWithRoster = HFWConverter(rosterStoreURL: rosterURL)
+
+        let url = try writeCSV(
+            "25-26 Gr 1 HFW Admin #1,2021xxx,78167xxxx,Joe,Smith,01/30/2019,,"
+            + "10/28/2025,35,177,19.77%,Below Basic,2\n")
+        let result = try Pipeline.convertFile(converter: converterWithRoster, url: url, answers: [:])
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student Grade Level"], "2")
+    }
+
     // MARK: - Output shape
 
     func testOutputColumnOrder() {

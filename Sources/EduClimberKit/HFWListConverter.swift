@@ -16,7 +16,14 @@ import Foundation
 /// across grades and future word lists, and the Assessment Name has to
 /// match eduCLIMBER's own configured name exactly anyway.
 public struct HFWListConverter: AssessmentConverter {
-    public init() {}
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
+
+    public init(rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()) {
+        self.rosterStoreURL = rosterStoreURL
+    }
 
     public let key = "hfw_skill_list"
     public let displayName = "High Frequency Words (Skill List Export)"
@@ -98,6 +105,10 @@ public struct HFWListConverter: AssessmentConverter {
         let grade = trimmed(answers["grade"])
         let schoolYear = trimmed(answers["school_year"])
 
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
+
         var result = ConversionResult(columns: outputColumns)
         var seenStudentIDs = Set<String>()
 
@@ -117,14 +128,31 @@ public struct HFWListConverter: AssessmentConverter {
                 rowProblems.append("Student ID \(studentID) appears more than once in this file.")
             }
 
+            var parsed = (first: "", last: "")
+            if !studentName.isEmpty, studentName.contains(",") {
+                parsed = RunningRecordsConverter.splitStudentName(studentName)
+            }
+            // Student Roster fixes are checked first (user-editable, so a
+            // correction made here or in the review window takes effect
+            // immediately); the hardcoded Name Fixes table is still the
+            // fallback of last resort for cases fixed before this existed.
+            let filledName = roster.fill(
+                studentID: studentID, firstName: parsed.first, lastName: parsed.last)
+            name.last = filledName.lastName
+            name.first = filledName.firstName.isEmpty
+                ? (SkillAssessmentReferenceData.nameFixes[studentID] ?? "")
+                : filledName.firstName
+
             if studentName.isEmpty {
-                rowProblems.append("Student Name is blank.")
+                if name.first.isEmpty && name.last.isEmpty {
+                    rowProblems.append("Student Name is blank.")
+                }
             } else if !studentName.contains(",") {
-                rowProblems.append("Student Name '\(studentName)' is not in 'Last, First' format.")
+                if name.first.isEmpty || name.last.isEmpty {
+                    rowProblems.append(
+                        "Student Name '\(studentName)' is not in 'Last, First' format.")
+                }
             } else {
-                let parsed = RunningRecordsConverter.splitStudentName(studentName)
-                name.last = parsed.last
-                name.first = SkillAssessmentReferenceData.nameFixes[studentID] ?? parsed.first
                 if name.last.isEmpty {
                     rowProblems.append("Student Name '\(studentName)' is missing a last name.")
                 }

@@ -21,7 +21,14 @@ public struct EurekaMathConverter: AssessmentConverter {
     /// eduCLIMBER's "Eureka Math Grades 3-5" assessment doesn't cover K-2.
     public static let supportedGrades = ["3", "4", "5"]
 
-    public init() {}
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
+
+    public init(rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()) {
+        self.rosterStoreURL = rosterStoreURL
+    }
 
     public let key = "eureka_math"
     public let displayName = "Eureka Math"
@@ -103,6 +110,10 @@ public struct EurekaMathConverter: AssessmentConverter {
 
         let schoolYear = trimmed(answers["school_year"])
 
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
+
         var result = ConversionResult(columns: outputColumns)
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
@@ -115,7 +126,7 @@ public struct EurekaMathConverter: AssessmentConverter {
             else { continue }
 
             let assessmentStatus = table.value(row, header("assessment_status"))
-            let studentID = table.value(row, header("student_id"))
+            let rawStudentID = table.value(row, header("student_id"))
             let student = table.value(row, header("student"))
             let rawGrade = table.value(row, header("grade"))
             let module = table.value(row, header("module"))
@@ -125,6 +136,17 @@ public struct EurekaMathConverter: AssessmentConverter {
 
             var rowProblems: [String] = []
             var name = (first: "", last: "")
+            if !student.isEmpty, student.contains(",") {
+                name = RunningRecordsConverter.splitStudentName(student)
+            }
+
+            // A row with no usable Student/Grade can still have a Student Id
+            // -- the Student Roster's fallback for exactly that, remembered
+            // from fixing the same gap on an earlier file.
+            let filled = roster.fill(
+                studentID: rawStudentID, firstName: name.first, lastName: name.last, grade: rawGrade)
+            let studentID = filled.studentID
+            name = (first: filled.firstName, last: filled.lastName)
 
             // Unlike the type_of_assessment filter above, a Module Assessment
             // that is not yet "done" is a legitimate row someone needs to look
@@ -140,23 +162,22 @@ public struct EurekaMathConverter: AssessmentConverter {
 
             if studentID.isEmpty { rowProblems.append("Student Id is blank.") }
 
-            if student.isEmpty {
-                rowProblems.append("Student is blank.")
-            } else if !student.contains(",") {
-                rowProblems.append("Student '\(student)' is not in 'Last, First' format.")
-            } else {
-                name = RunningRecordsConverter.splitStudentName(student)
-                if name.first.isEmpty || name.last.isEmpty {
+            if name.first.isEmpty || name.last.isEmpty {
+                if student.isEmpty {
+                    rowProblems.append("Student is blank.")
+                } else if !student.contains(",") {
+                    rowProblems.append("Student '\(student)' is not in 'Last, First' format.")
+                } else {
                     rowProblems.append("Student '\(student)' is missing a first or last name.")
                 }
             }
 
-            let grade = Self.normalizeGrade(rawGrade)
+            let grade = Self.normalizeGrade(filled.grade)
             if grade == nil {
                 rowProblems.append(
-                    rawGrade.isEmpty
+                    filled.grade.isEmpty
                         ? "Grade is blank."
-                        : "Grade '\(rawGrade)' is not recognized.")
+                        : "Grade '\(filled.grade)' is not recognized.")
             } else if let grade, !Self.supportedGrades.contains(grade) {
                 rowProblems.append(
                     "Grade \(grade) is not covered by the Eureka Math Grades 3-5 assessment "

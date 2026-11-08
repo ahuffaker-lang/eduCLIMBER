@@ -10,9 +10,15 @@ import EduClimberKit
 /// where the sheet's own Proficiency Level disagreed with the rubric -- are
 /// shown the same way, but never block anything: the row already converted
 /// with the rubric's value, and this is just the chance to see why.
+///
+/// "Fix & Remember…" is the other way out of a problem row: select it, type
+/// in whatever's missing (Student ID, email, name, grade), and it's saved to
+/// the shared Student Roster -- every converter's fallback, not just this
+/// one -- then "Retry Conversion" re-runs the whole file with the fix applied.
 final class ReviewIssuesSheet: NSWindowController {
     enum Decision {
         case skipAndContinue
+        case retryConversion
         case cancel
     }
 
@@ -21,6 +27,13 @@ final class ReviewIssuesSheet: NSWindowController {
     private var decision: Decision = .cancel
     private let problemsTable = NSTableView()
     private let noticesTable = NSTableView()
+    private let fixButton = NSButton()
+    private let retryButton = NSButton()
+    private let fixStatusLabel: NSTextField = {
+        let label = makeLabel("", secondary: true)
+        label.maximumNumberOfLines = 3
+        return label
+    }()
 
     /// Runs the sheet modally and returns what the user chose.
     static func run(over parent: NSWindow, result: ConversionResult, fileName: String) -> Decision {
@@ -93,12 +106,31 @@ final class ReviewIssuesSheet: NSWindowController {
         let copyButton = NSButton(
             title: "Copy List", target: self, action: #selector(copyIssues))
         copyButton.bezelStyle = .rounded
+
+        // Fixing a row here saves the correction to the shared Student
+        // Roster (any assessment can use it from then on), rather than just
+        // this one export -- so it's worth doing even when skipping the row
+        // would otherwise be good enough for today.
+        fixButton.title = "Fix & Remember…"
+        fixButton.bezelStyle = .rounded
+        fixButton.target = self
+        fixButton.action = #selector(fixSelected)
+        fixButton.isEnabled = false
+
+        retryButton.title = "Retry Conversion"
+        retryButton.bezelStyle = .rounded
+        retryButton.target = self
+        retryButton.action = #selector(retryConversion)
+        retryButton.isEnabled = false
+
         let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel))
         cancelButton.bezelStyle = .rounded
         cancelButton.keyEquivalent = "\u{1b}"
 
         let spacer = NSView()
-        var buttons: [NSView] = [copyButton, spacer, cancelButton]
+        var buttons: [NSView] = [copyButton]
+        if !result.issues.isEmpty { buttons.append(fixButton) }
+        buttons.append(contentsOf: [spacer, retryButton, cancelButton])
         if usable > 0 {
             // With nothing to skip (notices only), this just acknowledges and
             // proceeds -- every usable row is already included either way.
@@ -113,7 +145,7 @@ final class ReviewIssuesSheet: NSWindowController {
         buttonRow.orientation = .horizontal
         buttonRow.spacing = 8
 
-        let column = NSStackView(views: [headlineLabel] + sections + [buttonRow])
+        let column = NSStackView(views: [headlineLabel] + sections + [fixStatusLabel, buttonRow])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 14
@@ -127,6 +159,7 @@ final class ReviewIssuesSheet: NSWindowController {
             column.topAnchor.constraint(equalTo: root.topAnchor, constant: 20),
             column.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -20),
             headlineLabel.widthAnchor.constraint(equalTo: column.widthAnchor),
+            fixStatusLabel.widthAnchor.constraint(equalTo: column.widthAnchor),
             buttonRow.widthAnchor.constraint(equalTo: column.widthAnchor),
         ]
         for section in sections {
@@ -190,14 +223,48 @@ final class ReviewIssuesSheet: NSWindowController {
         NSApp.stopModal()
     }
 
+    @objc private func retryConversion() {
+        decision = .retryConversion
+        NSApp.stopModal()
+    }
+
     @objc private func cancel() {
         decision = .cancel
         NSApp.stopModal()
+    }
+
+    /// Opens the fix sheet for the one selected problem row, and -- if the
+    /// user saves something -- adds it to the shared Student Roster right
+    /// away, so "Retry Conversion" picks it up immediately.
+    @objc private func fixSelected() {
+        guard let window,
+              let row = problemsTable.selectedRowIndexes.first,
+              result.issues.indices.contains(row)
+        else { return }
+        let issue = result.issues[row]
+        guard let entry = StudentFixSheet.run(over: window, problemSummary: issue.description) else {
+            return
+        }
+        do {
+            let existing = try StudentRosterStore.load()
+            let merged = StudentRosterStore.upsert([entry], into: existing)
+            try StudentRosterStore.save(merged.merged)
+            fixStatusLabel.stringValue =
+                "Saved to the Student Roster. Click \"Retry Conversion\" to apply it."
+            retryButton.isEnabled = true
+        } catch {
+            fixStatusLabel.stringValue = "Could not save to the Student Roster: \(error.localizedDescription)"
+        }
     }
 }
 
 extension ReviewIssuesSheet: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int { issues(for: tableView).count }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard (notification.object as? NSTableView) === problemsTable else { return }
+        fixButton.isEnabled = problemsTable.selectedRowIndexes.count == 1
+    }
 
     func tableView(
         _ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int

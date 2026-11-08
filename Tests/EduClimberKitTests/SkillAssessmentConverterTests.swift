@@ -51,7 +51,10 @@ final class SkillAssessmentConverterTests: XCTestCase {
         ]
     }
 
-    func convert(_ table: Table, answers: [String: String]) throws -> ConversionResult {
+    func convert(
+        _ table: Table, answers: [String: String], using testConverter: SkillAssessmentConverter? = nil
+    ) throws -> ConversionResult {
+        let converter = testConverter ?? self.converter
         let mapping = Pipeline.matchColumns(converter: converter, table: table)
         return try Pipeline.convert(converter: converter, table: table, answers: answers, mapping: mapping)
     }
@@ -197,6 +200,40 @@ final class SkillAssessmentConverterTests: XCTestCase {
             XCTAssertTrue(
                 (error as? ConverterError)?.message.contains("Could not read the Aeries") == true)
         }
+    }
+
+    // MARK: - Student Roster fallback
+
+    func testStudentRosterFirstNameTakesPriorityOverTheHardcodedNameFixesTable() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "20222971", firstName: "FromRoster")], to: rosterURL)
+        let converterWithRoster = SkillAssessmentConverter(rosterStoreURL: rosterURL)
+
+        let aeries = try writeAeriesCSV([(id: "20222971", grade: "0", school: "667")])
+        let table = makeTable([studentRow(name: "Copado Cuevas, ", id: "20222971")])
+        let result = try convert(
+            table, answers: answers(aeriesPath: aeries.path), using: converterWithRoster)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "FromRoster")
+    }
+
+    func testStudentIDMissingFromAeriesFileFallsBackToTheStudentRosterGrade() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "20221371", grade: "6")], to: rosterURL)
+        let converterWithRoster = SkillAssessmentConverter(rosterStoreURL: rosterURL)
+
+        let aeries = try writeAeriesCSV([(id: "00000000", grade: "0", school: "667")])
+        let table = makeTable([studentRow(id: "20221371")])
+        let result = try convert(
+            table, answers: answers(aeriesPath: aeries.path), using: converterWithRoster)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student Grade Level"], "6")
     }
 
     // MARK: - Duplicate Student ID

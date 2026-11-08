@@ -22,7 +22,14 @@ import Foundation
 /// not every district format actually uses, so it's the one prompt here
 /// that can be left blank.
 public struct TagUploadConverter: AssessmentConverter {
-    public init() {}
+    /// Where the shared Student Roster lives. Injectable so tests can point
+    /// at a temporary file instead of the real, shared Application Support
+    /// location.
+    private let rosterStoreURL: URL
+
+    public init(rosterStoreURL: URL = StudentRosterStore.defaultStoreURL()) {
+        self.rosterStoreURL = rosterStoreURL
+    }
 
     public let key = "tag_upload"
     public let displayName = "Tag Upload"
@@ -128,11 +135,15 @@ public struct TagUploadConverter: AssessmentConverter {
         let tagName = trimmed(answers["tag_name"])
         let tagFlag = trimmed(answers["tag_flag"])
 
+        // Best-effort fallback only -- a missing or unreadable roster file
+        // just means no fixes are available yet, not a reason to stop.
+        let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
+
         var result = ConversionResult(columns: outputColumns)
         var seenStudentIDs: Set<String> = []
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
-            let studentID = table.value(row, header("student_id"))
+            let rawStudentID = table.value(row, header("student_id"))
 
             // A query that lists one enrollment segment per row can repeat the
             // same student; a tag upload only wants them tagged once. The
@@ -140,15 +151,15 @@ public struct TagUploadConverter: AssessmentConverter {
             // to come first in the source sheet. A blank ID isn't a real key,
             // so blank rows are never considered duplicates of each other --
             // each is its own "Student ID is blank" problem below.
-            if !studentID.isEmpty {
-                if seenStudentIDs.contains(studentID) {
+            if !rawStudentID.isEmpty {
+                if seenStudentIDs.contains(rawStudentID) {
                     result.notices.append(RowError(
                         rowNumber: rowNumber,
-                        message: "Student ID \(studentID) — duplicate of an earlier row; "
+                        message: "Student ID \(rawStudentID) — duplicate of an earlier row; "
                             + "this row was skipped."))
                     continue
                 }
-                seenStudentIDs.insert(studentID)
+                seenStudentIDs.insert(rawStudentID)
             }
 
             let student = table.value(row, combinedHeader)
@@ -163,19 +174,32 @@ public struct TagUploadConverter: AssessmentConverter {
                 // Already split by the source system: use the values as they are.
                 firstName = splitFirst
                 lastName = splitLast
-                if splitFirst.isEmpty { rowProblems.append("Student First Name is blank.") }
-                if splitLast.isEmpty { rowProblems.append("Student Last Name is blank.") }
             } else if !student.isEmpty {
                 // One combined column: "Last, First".
                 let name = RunningRecordsConverter.splitStudentName(student)
                 firstName = name.first
                 lastName = name.last
-                if !student.contains(",") {
-                    rowProblems.append("Student Name '\(student)' is not in 'Last, First' format.")
-                } else if name.first.isEmpty || name.last.isEmpty {
-                    rowProblems.append("Student Name '\(student)' is missing a first or last name.")
+            }
+
+            // A row with no usable name can still have a Student ID -- the
+            // Student Roster's fallback for exactly that, remembered from
+            // fixing the same gap on an earlier file.
+            let filled = roster.fill(studentID: rawStudentID, firstName: firstName, lastName: lastName)
+            let studentID = filled.studentID
+            firstName = filled.firstName
+            lastName = filled.lastName
+
+            if useSplitNames && !(splitFirst.isEmpty && splitLast.isEmpty) {
+                if firstName.isEmpty { rowProblems.append("Student First Name is blank.") }
+                if lastName.isEmpty { rowProblems.append("Student Last Name is blank.") }
+            } else if !student.isEmpty {
+                if firstName.isEmpty || lastName.isEmpty {
+                    rowProblems.append(
+                        student.contains(",")
+                            ? "Student Name '\(student)' is missing a first or last name."
+                            : "Student Name '\(student)' is not in 'Last, First' format.")
                 }
-            } else {
+            } else if firstName.isEmpty && lastName.isEmpty {
                 rowProblems.append("Student name is blank.")
             }
             if studentID.isEmpty { rowProblems.append("Student ID is blank.") }

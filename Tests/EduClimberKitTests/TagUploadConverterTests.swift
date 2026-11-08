@@ -179,6 +179,26 @@ final class TagUploadConverterTests: XCTestCase {
         }
     }
 
+    // MARK: - Student Roster fallback
+
+    func testBlankNameIsFilledFromTheStudentRoster() throws {
+        let rosterURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(studentID: "20212318", firstName: "Ethan", lastName: "Garcia")],
+            to: rosterURL)
+        let converterWithRoster = TagUploadConverter(rosterStoreURL: rosterURL)
+
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            "20212318,,")
+        let result = try Pipeline.convertFile(converter: converterWithRoster, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student First Name"], "Ethan")
+        XCTAssertEqual(result.rows.first?["Student Last Name"], "Garcia")
+    }
+
     // MARK: - Duplicate Student IDs are removed
 
     /// A query listing one row per enrollment segment can repeat a student;
