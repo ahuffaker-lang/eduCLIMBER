@@ -42,8 +42,9 @@ public struct ELPACLongitudinalRosterConverter: AssessmentConverter {
                 placeholder: "2026-2027", defaultValue: EurekaMathConverter.currentSchoolYear()),
             PromptField(
                 key: "tag_name_prefix", label: "Tag Name Prefix", kind: .text(pattern: ".*"),
-                help: "Each student's ELPI level is appended after a space, e.g. \"ELPI Level 2H\".",
-                placeholder: "ELPI Level", defaultValue: "ELPI Level"),
+                help: "Each student's ELPI level is appended after a space, e.g. \"ELPI Level 2H\". "
+                    + "Leave blank to tag with just the bare level.",
+                placeholder: "ELPI Level", defaultValue: "ELPI Level", isRequired: false),
             PromptField(
                 key: "include_tag_flag", label: "Include Tag Flag Column?",
                 kind: .choice(["No", "Yes"]),
