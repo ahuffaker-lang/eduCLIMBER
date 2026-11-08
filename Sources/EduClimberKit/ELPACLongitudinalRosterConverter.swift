@@ -45,9 +45,10 @@ public struct ELPACLongitudinalRosterConverter: AssessmentConverter {
                 placeholder: "ELPI Level ", defaultValue: "ELPI Level "),
             PromptField(
                 key: "include_tag_flag", label: "Include Tag Flag Column?",
-                kind: .choice(["No", "Yes"]), isRequired: false,
+                kind: .choice(["No", "Yes"]),
                 help: "Most tag upload formats don't use a flag value -- leave this off unless "
-                    + "yours does. An unanswered or missing value behaves the same as \"No\"."),
+                    + "yours does. An unanswered or missing value behaves the same as \"No\".",
+                isRequired: false),
             PromptField(
                 key: "tag_flag", label: "Tag Flag", kind: .text(pattern: ".*"),
                 help: "Only used when \"Include Tag Flag Column?\" above is Yes.",
