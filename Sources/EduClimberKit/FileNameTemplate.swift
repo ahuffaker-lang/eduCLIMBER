@@ -1,12 +1,10 @@
 import Foundation
 
 /// A pattern for naming the exported file, e.g.
-/// `{assessment}_{language}_{window}_{year}_educlimber`.
-///
-/// Two batches that differ only by language would otherwise land on the same
-/// file name, so the pieces that distinguish a batch belong in the name. Any
-/// prompt the converter asks for can be used as a token, which means a future
-/// assessment type gets the same facility without changes here.
+/// `eduCLIMBER_Upload_{assessment}_{date}_{time}` -- the district's standard
+/// naming convention for every converter's export. Any prompt the converter
+/// asks for can also be used as a token (e.g. `{language}`, `{window}`), for
+/// a batch that needs more than the standard pieces to stay unique.
 public struct FileNameTemplate: Equatable {
     public let pattern: String
 
@@ -17,7 +15,7 @@ public struct FileNameTemplate: Equatable {
     public static let fallbackName = "converted.csv"
 
     /// Tokens available for *any* converter, beyond its own prompt keys.
-    public static let generalTokens = ["assessment", "date", "source"]
+    public static let generalTokens = ["assessment", "date", "time", "source"]
 
     /// Build the token values for one batch.
     public static func tokens(
@@ -35,10 +33,18 @@ public struct FileNameTemplate: Equatable {
         tokens["year"] = tokens["year"] ?? answers["school_year"] ?? ""
         tokens["assessment"] = converter.displayName
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        tokens["date"] = formatter.string(from: date)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        tokens["date"] = dateFormatter.string(from: date)
+
+        // Dashes, not colons -- a colon is illegal in a file name on macOS
+        // (Finder renders it as one, but the underlying file system rejects
+        // it), and this keeps the same separator style as `date` above.
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "HH-mm-ss"
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        tokens["time"] = timeFormatter.string(from: date)
 
         var base = sourceName
         if let dot = base.lastIndex(of: "."), dot != base.startIndex {

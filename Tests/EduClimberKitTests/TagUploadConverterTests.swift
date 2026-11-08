@@ -265,8 +265,9 @@ final class TagUploadConverterTests: XCTestCase {
         ])
     }
 
-    func testDefaultFileNameIncludesTagNameAndYear() {
+    func testDefaultFileNameFollowsTheStandardConvention() {
         let name = converter.defaultOutputName(answers: answers())
-        XCTAssertEqual(name, "SpecialEducation_2026-2027_tag_upload.csv")
+        XCTAssertTrue(name.hasPrefix("eduCLIMBER_Upload_TagUpload_"), name)
+        XCTAssertTrue(name.hasSuffix(".csv"), name)
     }
 }

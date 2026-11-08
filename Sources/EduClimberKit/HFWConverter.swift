@@ -206,11 +206,8 @@ public struct HFWConverter: AssessmentConverter {
         return (schoolYear: "20\(startYY)-20\(endYY)", window: "Administration \(admin)")
     }
 
-    /// No shared window or year to key the name on -- a file mixes all three
-    /// administrations -- so the name leans on the source file's own name and
-    /// today's date instead.
     public var defaultFileNameTemplate: String {
-        "{assessment}_{source}_{date}_educlimber"
+        "eduCLIMBER_Upload_{assessment}_{date}_{time}"
     }
 
     public func defaultOutputName(answers: [String: String]) -> String {

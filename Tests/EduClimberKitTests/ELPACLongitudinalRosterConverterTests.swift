@@ -63,10 +63,13 @@ final class ELPACLongitudinalRosterConverterTests: XCTestCase {
         XCTAssertEqual(converter.outputColumns, TagUploadConverter().outputColumns)
     }
 
-    func testDefaultOutputNameMatchesTagUpload() {
+    /// Comparing the templates themselves, rather than two separately-called
+    /// `defaultOutputName(answers:)` results, avoids a one-in-a-million flake
+    /// if the two calls happen to straddle a clock second (the template
+    /// includes `{time}`).
+    func testDefaultFileNameTemplateMatchesTagUpload() {
         XCTAssertEqual(
-            converter.defaultOutputName(answers: answers()),
-            TagUploadConverter().defaultOutputName(answers: answers()))
+            converter.defaultFileNameTemplate, TagUploadConverter().defaultFileNameTemplate)
     }
 
     /// `convert()` is called directly here (bypassing `loadSource`, which

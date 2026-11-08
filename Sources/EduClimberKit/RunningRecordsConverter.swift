@@ -369,10 +369,8 @@ public struct RunningRecordsConverter: AssessmentConverter {
             carriedForwardNote: "no table for \(requested)-\(requested + 1) yet")
     }
 
-    /// English and Spanish batches share a window and a school year, so the
-    /// language has to be in the name for the two files to sit side by side.
     public var defaultFileNameTemplate: String {
-        "Running_Records_{language}_{window}_{year}_educlimber"
+        "eduCLIMBER_Upload_{assessment}_{date}_{time}"
     }
 
     public func defaultOutputName(answers: [String: String]) -> String {

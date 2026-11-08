@@ -1,8 +1,11 @@
 import XCTest
 @testable import EduClimberKit
 
-/// English and Spanish batches share a trimester and a school year, so the file
-/// name is what keeps them apart.
+/// Every converter's default export name follows the district's standard
+/// convention -- `eduCLIMBER_Upload_{assessment}_{date}_{time}` -- rather
+/// than a per-converter pattern. A batch that needs more than that to stay
+/// unique (e.g. English vs. Spanish Running Records run the same day) can
+/// still add `{language}`/`{window}`/`{year}` etc. via a custom template.
 final class FileNamingTests: XCTestCase {
     let converter = RunningRecordsConverter()
 
@@ -11,20 +14,24 @@ final class FileNamingTests: XCTestCase {
         ["assessment_window": window, "school_year": year, "language": language]
     }
 
-    func testEnglishAndSpanishGetDifferentNames() {
-        let english = converter.defaultOutputName(answers: answers(language: "English"))
-        let spanish = converter.defaultOutputName(answers: answers(language: "Spanish"))
-        XCTAssertEqual(english, "Running_Records_English_Trimester2_2026-2027_educlimber.csv")
-        XCTAssertEqual(spanish, "Running_Records_Spanish_Trimester2_2026-2027_educlimber.csv")
-        XCTAssertNotEqual(english, spanish)
+    func testDefaultNameFollowsTheStandardConvention() {
+        let name = converter.defaultOutputName(answers: answers(language: "English"))
+        XCTAssertTrue(name.hasPrefix("eduCLIMBER_Upload_RunningRecords_"), name)
+        XCTAssertTrue(name.hasSuffix(".csv"), name)
     }
 
-    func testSameLanguageDifferentWindowsAlsoDiffer() {
-        let first = converter.defaultOutputName(
-            answers: answers(language: "Spanish", window: "Trimester 1"))
-        let third = converter.defaultOutputName(
-            answers: answers(language: "Spanish", window: "Trimester 3"))
-        XCTAssertNotEqual(first, third)
+    /// The default name no longer encodes language or window -- a batch that
+    /// needs that distinction uses a custom template instead (see
+    /// `testCustomTemplateUsesAnyPromptAsAToken`), so this only exercises the
+    /// standard convention's own tokens.
+    func testCustomTemplateCanStillDistinguishLanguageAndWindow() {
+        let tokensEnglish = FileNameTemplate.tokens(
+            converter: converter, answers: answers(language: "English", window: "Trimester 1"))
+        let tokensSpanish = FileNameTemplate.tokens(
+            converter: converter, answers: answers(language: "Spanish", window: "Trimester 3"))
+        let template = FileNameTemplate("{language}_{window}_{year}_RR")
+        XCTAssertNotEqual(
+            template.render(tokens: tokensEnglish), template.render(tokens: tokensSpanish))
     }
 
     func testCustomTemplateUsesAnyPromptAsAToken() {
@@ -46,6 +53,15 @@ final class FileNamingTests: XCTestCase {
         XCTAssertTrue(
             FileNameTemplate("{date}").render(tokens: tokens).hasPrefix("2026-01-0"),
             FileNameTemplate("{date}").render(tokens: tokens))
+    }
+
+    /// Dashes rather than colons -- a colon is illegal in a macOS file name.
+    func testTimeTokenIsHourMinuteSecondWithDashes() {
+        let tokens = FileNameTemplate.tokens(
+            converter: converter, answers: answers(language: "English"))
+        let time = FileNameTemplate("{time}").render(tokens: tokens)
+        XCTAssertNotNil(
+            time.range(of: "^\\d{2}-\\d{2}-\\d{2}\\.csv$", options: .regularExpression), time)
     }
 
     func testSpacesAndIllegalCharactersAreRemoved() {

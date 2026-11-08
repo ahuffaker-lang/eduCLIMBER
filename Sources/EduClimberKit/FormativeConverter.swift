@@ -353,7 +353,7 @@ public struct FormativeConverter: AssessmentConverter {
     }
 
     public var defaultFileNameTemplate: String {
-        "{assessment}_{source}_{date}_educlimber"
+        "eduCLIMBER_Upload_{assessment}_{date}_{time}"
     }
 
     public func defaultOutputName(answers: [String: String]) -> String {

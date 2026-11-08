@@ -229,9 +229,9 @@ final class RunningRecordsTests: XCTestCase {
     }
 
     func testDefaultOutputName() {
-        XCTAssertEqual(
-            converter.defaultOutputName(answers: answers),
-            "Running_Records_English_Trimester2_2026-2027_educlimber.csv")
+        let name = converter.defaultOutputName(answers: answers)
+        XCTAssertTrue(name.hasPrefix("eduCLIMBER_Upload_RunningRecords_"), name)
+        XCTAssertTrue(name.hasSuffix(".csv"), name)
     }
 }
 

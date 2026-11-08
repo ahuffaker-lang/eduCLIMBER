@@ -227,9 +227,7 @@ public struct TagUploadConverter: AssessmentConverter {
         return result
     }
 
-    /// Tag name rather than window -- this converter has no assessment
-    /// window -- so two tags run the same day still land on different files.
-    public var defaultFileNameTemplate: String { "{tag_name}_{year}_tag_upload" }
+    public var defaultFileNameTemplate: String { "eduCLIMBER_Upload_{assessment}_{date}_{time}" }
 
     public func defaultOutputName(answers: [String: String]) -> String {
         let tokens = FileNameTemplate.tokens(converter: self, answers: answers)

@@ -348,7 +348,7 @@ extension AssessmentConverter {
 
     public func duplicateGroupLabel(for table: Table, firstRowIndex: Int) -> String { "" }
 
-    public var defaultFileNameTemplate: String { "{assessment}_{window}_{year}_educlimber" }
+    public var defaultFileNameTemplate: String { "eduCLIMBER_Upload_{assessment}_{date}_{time}" }
 
     /// Token names this converter understands, for the file-name help text.
     public var fileNameTokens: [String] {
