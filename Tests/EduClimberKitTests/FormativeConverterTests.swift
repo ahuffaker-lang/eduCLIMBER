@@ -78,6 +78,7 @@ final class FormativeConverterTests: XCTestCase {
 
     func answers(rosterPath: String) -> [String: String] {
         [
+            "assessment_group": "Social Studies Benchmarks",
             "assessment_name": "Benchmark 1: Origins of Civilization",
             "assessment_window": "Test 1",
             "school_year": "2026-2027",
@@ -119,7 +120,7 @@ final class FormativeConverterTests: XCTestCase {
         let url = try writeCSV(blankEmailRow)
         let result = try convert(url, answers: answers(rosterPath: roster.path))
         XCTAssertFalse(result.isClean, "a blank-email student should be flagged, not silently dropped")
-        XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
+        XCTAssertTrue(result.errors.contains { $0.message.contains("Tools > Formative ID Matches") })
     }
 
     // MARK: - Falling back to the Formative ID Matches store
@@ -156,7 +157,7 @@ final class FormativeConverterTests: XCTestCase {
         let result = try convert(
             url, answers: answers(rosterPath: roster.path),
             using: FormativeConverter(matchStoreURL: matchStore))
-        XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
+        XCTAssertTrue(result.errors.contains { $0.message.contains("Tools > Formative ID Matches") })
     }
 
     // MARK: - A placeholder "email" (no @) is treated the same as a blank one
@@ -177,7 +178,7 @@ final class FormativeConverterTests: XCTestCase {
         let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
         let url = try writeCSV(placeholderEmailRow)
         let result = try convert(url, answers: answers(rosterPath: roster.path))
-        XCTAssertTrue(result.errors.contains { $0.message.contains("Window > Formative ID Matches") })
+        XCTAssertTrue(result.errors.contains { $0.message.contains("Tools > Formative ID Matches") })
         XCTAssertFalse(
             result.errors.contains { $0.message.contains("was not found in the roster") },
             "a placeholder with no @ is 'no email', not a bad roster lookup: \(result.errors.map(\.message))")
@@ -340,6 +341,29 @@ final class FormativeConverterTests: XCTestCase {
     func testAssessmentWindowIsAFixedChoice() {
         let prompt = converter.prompts.first { $0.key == "assessment_window" }
         XCTAssertEqual(prompt?.choices, ["Test 1", "Test 2", "Test 3"])
+    }
+
+    func testDisplayNameIsFormative() {
+        XCTAssertEqual(converter.displayName, "Formative")
+    }
+
+    /// Formative covers more than one subject (Social Studies, Science, ELA
+    /// IABs, ...), so Assessment Group is typed in rather than fixed.
+    func testAssessmentGroupPromptIsFreeText() {
+        let prompt = converter.prompts.first { $0.key == "assessment_group" }!
+        XCTAssertTrue(prompt.isRequired)
+        XCTAssertNotNil(prompt.validate(""))
+        XCTAssertNil(prompt.validate("Science Benchmarks"))
+    }
+
+    func testAssessmentGroupComesFromTheAnswerNotAFixedValue() throws {
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(submittedRow)
+        var customAnswers = answers(rosterPath: roster.path)
+        customAnswers["assessment_group"] = "Science Benchmarks"
+        let result = try convert(url, answers: customAnswers)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Assessment Group"], "Science Benchmarks")
     }
 
     // MARK: - Duplicate submissions

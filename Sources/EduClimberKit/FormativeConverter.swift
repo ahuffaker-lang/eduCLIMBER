@@ -1,6 +1,11 @@
 import Foundation
 
-/// Formative export (Social Studies benchmarks) -> eduCLIMBER Generic Assessment.
+/// Formative export -> eduCLIMBER Generic Assessment.
+///
+/// Formative is used across several subjects (Social Studies, Science, ELA
+/// IABs, and more), not just one, so Assessment Group is typed in per batch
+/// rather than fixed -- it has to match whatever eduCLIMBER assessment group
+/// this particular benchmark belongs to.
 ///
 /// The export mixes real student rows in with rollup rows -- a Key row, a
 /// Tags row, a Totals row, and a subtotal row per school/teacher/class --
@@ -23,8 +28,6 @@ import Foundation
 /// report, since "go check on these students" is a different kind of task
 /// than "fix a typo in the source file."
 public struct FormativeConverter: AssessmentConverter {
-    public static let assessmentGroup = "Social Studies Benchmarks"
-
     /// Where the Formative ID Matches window's saved matches live. Injectable
     /// so tests can point at a temporary file instead of the real, shared
     /// Application Support location.
@@ -35,7 +38,7 @@ public struct FormativeConverter: AssessmentConverter {
     }
 
     public let key = "formative_social_studies_benchmark"
-    public let displayName = "Social Studies Benchmark (Formative)"
+    public let displayName = "Formative"
     public let summary =
         "Formative export (Student ID, Timestamp, Email/username, Last name, First name, Total "
         + "score (%)). Rollup rows (Key, Tags, Totals, and school/teacher/class subtotals) are "
@@ -46,6 +49,10 @@ public struct FormativeConverter: AssessmentConverter {
 
     public var prompts: [PromptField] {
         [
+            PromptField(
+                key: "assessment_group", label: "Assessment Group", kind: .text(pattern: ".*"),
+                help: "Must match an existing eduCLIMBER assessment group exactly.",
+                placeholder: "Social Studies Benchmarks"),
             PromptField(
                 key: "assessment_name", label: "Assessment Name", kind: .text(pattern: ".*"),
                 help: "e.g. Benchmark 1: Origins of Civilization.",
@@ -120,6 +127,7 @@ public struct FormativeConverter: AssessmentConverter {
             throw ConverterError("The source file has a header row but no student rows.")
         }
 
+        let assessmentGroup = trimmed(answers["assessment_group"])
         let assessmentName = trimmed(answers["assessment_name"])
         let assessmentWindow = trimmed(answers["assessment_window"])
         let schoolYear = trimmed(answers["school_year"])
@@ -177,7 +185,7 @@ public struct FormativeConverter: AssessmentConverter {
                 result.errors.append(RowError(
                     rowNumber: rowNumber,
                     message: labelPrefix + "has no email in the export and no saved match -- "
-                        + "add one in Window > Formative ID Matches."))
+                        + "add one in Tools > Formative ID Matches."))
                 continue
             }
             if usedSavedMatch {
@@ -225,7 +233,7 @@ public struct FormativeConverter: AssessmentConverter {
             }
 
             result.rows.append([
-                "Assessment Group": Self.assessmentGroup,
+                "Assessment Group": assessmentGroup,
                 "Assessment Name": assessmentName,
                 "Assessment Window": assessmentWindow,
                 "School Year": schoolYear,
