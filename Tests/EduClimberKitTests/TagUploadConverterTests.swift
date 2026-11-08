@@ -14,9 +14,12 @@ final class TagUploadConverterTests: XCTestCase {
     }
 
     func answers(
-        year: String = "2026-2027", tagName: String = "Special Education", tagFlag: String? = "Y"
+        year: String = "2026-2027", tagName: String = "Special Education", tagFlag: String? = "Y",
+        includeTagFlag: String = "Yes"
     ) -> [String: String] {
-        var values = ["school_year": year, "tag_name": tagName]
+        var values = [
+            "school_year": year, "tag_name": tagName, "include_tag_flag": includeTagFlag,
+        ]
         if let tagFlag { values["tag_flag"] = tagFlag }
         return values
     }
@@ -81,6 +84,48 @@ final class TagUploadConverterTests: XCTestCase {
         XCTAssertNil(prompt.validate(""))
         XCTAssertNil(prompt.validate(nil))
         XCTAssertNil(prompt.validate("Y"))
+    }
+
+    // MARK: - Tag Flag column is off by default (most districts don't use one)
+
+    /// "No" is listed first so it's the control's natural default selection
+    /// in the UI (an `NSPopUpButton` defaults to its first item).
+    func testIncludeTagFlagPromptDefaultsToNo() {
+        let prompt = converter.prompts.first { $0.key == "include_tag_flag" }!
+        XCTAssertEqual(prompt.choices, ["No", "Yes"])
+    }
+
+    func testTagFlagColumnIsExcludedWhenNotRequested() throws {
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            "20212318,Ethan,Garcia")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url, answers: answers(includeTagFlag: "No"))
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertFalse(result.columns.contains("Tag Flag"), "\(result.columns)")
+    }
+
+    /// An omitted answer (as if the prompt were never rendered) behaves the
+    /// same as an explicit "No" -- excluded, not included-but-blank.
+    func testTagFlagColumnIsExcludedWhenAnswerIsMissingEntirely() throws {
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            "20212318,Ethan,Garcia")
+        var noToggle = answers()
+        noToggle["include_tag_flag"] = nil
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: noToggle)
+        XCTAssertFalse(result.columns.contains("Tag Flag"), "\(result.columns)")
+    }
+
+    func testTagFlagColumnIsIncludedWhenRequested() throws {
+        let url = try writeCSV(
+            "Student ID,Student First Name,Student Last Name",
+            "20212318,Ethan,Garcia")
+        let result = try Pipeline.convertFile(
+            converter: converter, url: url,
+            answers: answers(tagFlag: "Y", includeTagFlag: "Yes"))
+        XCTAssertTrue(result.columns.contains("Tag Flag"), "\(result.columns)")
+        XCTAssertEqual(result.rows.first?["Tag Flag"], "Y")
     }
 
     func testTagNamePromptIsStillRequired() {

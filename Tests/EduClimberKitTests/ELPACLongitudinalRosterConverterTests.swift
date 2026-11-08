@@ -1,42 +1,57 @@
 import XCTest
 @testable import EduClimberKit
 
-/// This converter is a thin wrapper: `loadSource` runs the ELPAC Longitudinal
-/// Roster file through `ELPACLongitudinalReader`, and everything else --
-/// column matching, Student ID/name resolution, deduplication, the Student
-/// Roster fallback, prompts, naming -- is delegated to a plain
-/// `TagUploadConverter`. `TagUploadConverterTests` already covers that
-/// delegated behavior in depth, so these tests focus on the two things this
-/// type adds: reading the real export shape, and forwarding everything else
-/// unchanged.
 final class ELPACLongitudinalRosterConverterTests: XCTestCase {
     let converter = ELPACLongitudinalRosterConverter()
 
     func answers(
-        year: String = "2026-2027", tagName: String = "EL Students", tagFlag: String? = "Y"
+        year: String = "2026-2027", tagNamePrefix: String = "ELPI Level ",
+        includeTagFlag: String = "No", tagFlag: String? = nil
     ) -> [String: String] {
-        var values = ["school_year": year, "tag_name": tagName]
+        var values = [
+            "school_year": year, "tag_name_prefix": tagNamePrefix,
+            "include_tag_flag": includeTagFlag,
+        ]
         if let tagFlag { values["tag_flag"] = tagFlag }
         return values
     }
 
-    func testEndToEndConvertsTheMostRecentYearForEachStudent() throws {
-        let url = URL(fileURLWithPath: #filePath)
+    private func fixtureURL() -> URL {
+        URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Fixtures/elpac_longitudinal_roster.xlsx")
-        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
-        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+    }
+
+    /// The fixture's four students (see `ELPACLongitudinalReaderTests`):
+    /// Abundis (3L, most recent of several years), Acevedo (3H, a Summative
+    /// result winning over a same-year Initial placeholder), Carrillo (no
+    /// testing history at all -- flagged, not tagged), and Delgado (4).
+    func testEachStudentGetsATagNameBuiltFromTheirOwnELPILevel() throws {
+        let result = try Pipeline.convertFile(converter: converter, url: fixtureURL(), answers: answers())
         XCTAssertEqual(
-            result.rows.map { $0["Student ID"] },
-            ["20212207", "20180241", "20260003", "20220456"])
-        XCTAssertEqual(result.rows[0]["Student First Name"], "Kataleah C.")
-        XCTAssertEqual(result.rows[0]["Student Last Name"], "Abundis")
-        result.rows.forEach {
-            XCTAssertEqual($0["School Year"], "2026-2027")
-            XCTAssertEqual($0["Tag Name"], "EL Students")
-            XCTAssertEqual($0["Tag Flag"], "Y")
-        }
+            result.rows.map { $0["Student ID"] }, ["20212207", "20180241", "20220456"])
+        XCTAssertEqual(result.rows[0]["Tag Name"], "ELPI Level 3L")
+        XCTAssertEqual(result.rows[1]["Tag Name"], "ELPI Level 3H")
+        XCTAssertEqual(result.rows[2]["Tag Name"], "ELPI Level 4")
+        result.rows.forEach { XCTAssertEqual($0["School Year"], "2026-2027") }
+    }
+
+    func testCustomPrefixIsHonored() throws {
+        let result = try Pipeline.convertFile(
+            converter: converter, url: fixtureURL(),
+            answers: answers(tagNamePrefix: "ELPI"))
+        XCTAssertEqual(result.rows.first?["Tag Name"], "ELPI3L")
+    }
+
+    /// A student with no Academic Year on file yet has no level to tag them
+    /// with, so they're flagged rather than silently skipped or guessed at.
+    func testStudentWithNoCurrentYearELPIIsFlagged() throws {
+        let result = try Pipeline.convertFile(converter: converter, url: fixtureURL(), answers: answers())
+        XCTAssertTrue(
+            result.errors.contains { $0.message.contains("No current-year ELPI level") },
+            "\(result.errors.map(\.description))")
+        XCTAssertFalse(result.rows.contains { $0["Student ID"] == "20260003" })
     }
 
     func testRejectsAFileThatIsNotXLSX() throws {
@@ -52,30 +67,27 @@ final class ELPACLongitudinalRosterConverterTests: XCTestCase {
         }
     }
 
-    // MARK: - Delegation to TagUploadConverter
+    // MARK: - Tag Flag is off by default, per student request
 
-    func testPromptsMatchTagUpload() {
-        XCTAssertEqual(
-            converter.prompts.map(\.key), TagUploadConverter().prompts.map(\.key))
+    func testTagFlagColumnIsExcludedByDefault() throws {
+        let result = try Pipeline.convertFile(converter: converter, url: fixtureURL(), answers: answers())
+        XCTAssertFalse(result.columns.contains("Tag Flag"), "\(result.columns)")
     }
 
-    func testOutputColumnsMatchTagUpload() {
-        XCTAssertEqual(converter.outputColumns, TagUploadConverter().outputColumns)
+    func testTagFlagColumnIsIncludedWhenRequested() throws {
+        let result = try Pipeline.convertFile(
+            converter: converter, url: fixtureURL(),
+            answers: answers(includeTagFlag: "Yes", tagFlag: "Y"))
+        XCTAssertTrue(result.columns.contains("Tag Flag"), "\(result.columns)")
+        XCTAssertEqual(result.rows.first?["Tag Flag"], "Y")
     }
 
-    /// Comparing the templates themselves, rather than two separately-called
-    /// `defaultOutputName(answers:)` results, avoids a one-in-a-million flake
-    /// if the two calls happen to straddle a clock second (the template
-    /// includes `{time}`).
-    func testDefaultFileNameTemplateMatchesTagUpload() {
-        XCTAssertEqual(
-            converter.defaultFileNameTemplate, TagUploadConverter().defaultFileNameTemplate)
-    }
+    // MARK: - Student Roster fallback and deduplication
 
     /// `convert()` is called directly here (bypassing `loadSource`, which
-    /// only accepts the real .xlsx export) to prove the roster-aware
-    /// `TagUploadConverter` underneath is what actually runs.
-    func testStudentRosterFallbackStillApplies() throws {
+    /// only accepts the real .xlsx export) with a hand-built table shaped
+    /// like the reader's output.
+    func testStudentRosterFallbackFillsAMissingName() throws {
         let rosterURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
             .appendingPathComponent("student_roster.csv")
@@ -85,15 +97,51 @@ final class ELPACLongitudinalRosterConverterTests: XCTestCase {
         let converterWithRoster = ELPACLongitudinalRosterConverter(rosterStoreURL: rosterURL)
 
         let table = Table(
-            headers: ["Student ID", "Student First Name", "Student Last Name"],
-            rows: [["Student ID": "20212318", "Student First Name": "", "Student Last Name": ""]])
+            headers: ["Student ID", "Student Name", "Overall Performance Level"],
+            rows: [[
+                "Student ID": "20212318", "Student Name": "", "Overall Performance Level": "2H",
+            ]])
         let columns: [String: String?] = [
-            "student_id": "Student ID", "first_name": "Student First Name",
-            "last_name": "Student Last Name", "student": nil,
+            "student_id": "Student ID", "student_name": "Student Name",
+            "elpi_level": "Overall Performance Level",
         ]
         let result = try converterWithRoster.convert(table: table, answers: answers(), columns: columns)
         XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
         XCTAssertEqual(result.rows.first?["Student First Name"], "Ethan")
         XCTAssertEqual(result.rows.first?["Student Last Name"], "Garcia")
+        XCTAssertEqual(result.rows.first?["Tag Name"], "ELPI Level 2H")
+    }
+
+    func testDuplicateStudentIDsAreSkippedWithANotice() throws {
+        let table = Table(
+            headers: ["Student ID", "Student Name", "Overall Performance Level"],
+            rows: [
+                ["Student ID": "20212318", "Student Name": "Garcia, Ethan",
+                 "Overall Performance Level": "2H"],
+                ["Student ID": "20212318", "Student Name": "Garcia, Ethan",
+                 "Overall Performance Level": "2H"],
+            ])
+        let columns: [String: String?] = [
+            "student_id": "Student ID", "student_name": "Student Name",
+            "elpi_level": "Overall Performance Level",
+        ]
+        let result = try converter.convert(table: table, answers: answers(), columns: columns)
+        XCTAssertEqual(result.rows.count, 1)
+        XCTAssertEqual(result.notices.count, 1)
+    }
+
+    // MARK: - Output shape
+
+    func testOutputColumnOrder() {
+        XCTAssertEqual(converter.outputColumns, [
+            "Student ID", "Student First Name", "Student Last Name",
+            "School Year", "Tag Name", "Tag Flag",
+        ])
+    }
+
+    func testDefaultFileNameFollowsTheStandardConvention() {
+        let name = converter.defaultOutputName(answers: answers())
+        XCTAssertTrue(name.hasPrefix("eduCLIMBER_Upload_ELPACLongitudinalRosterTagUpload_"), name)
+        XCTAssertTrue(name.hasSuffix(".csv"), name)
     }
 }

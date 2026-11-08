@@ -19,8 +19,10 @@ import Foundation
 /// again. School Year, Tag Name, and Tag Flag are not in the source file at
 /// all -- they describe the batch as a whole, so they're typed in once and
 /// stamped onto every row. Tag Flag is the one eduCLIMBER tag-upload column
-/// not every district format actually uses, so it's the one prompt here
-/// that can be left blank.
+/// not every district format actually uses, so whether it's in the export at
+/// all is its own prompt -- off by default, since most districts don't use
+/// it -- rather than just leaving the value blank (a column full of nothing
+/// still has to be dealt with on the eduCLIMBER side).
 public struct TagUploadConverter: AssessmentConverter {
     /// Where the shared Student Roster lives. Injectable so tests can point
     /// at a temporary file instead of the real, shared Application Support
@@ -39,8 +41,8 @@ public struct TagUploadConverter: AssessmentConverter {
         + "either a combined 'Student Name' column ('Last, First') or separate first/last name "
         + "columns -- whatever else it contains, and whatever those columns are called. Rows "
         + "repeating the same Student ID are deduplicated, keeping the first. School Year and "
-        + "Tag Name are typed in once for the whole batch; Tag Flag is also typed in and can be "
-        + "left blank for a tag format that doesn't use one."
+        + "Tag Name are typed in once for the whole batch; Tag Flag is off by default and can "
+        + "be turned on for a tag format that uses one."
 
     public var prompts: [PromptField] {
         [
@@ -54,8 +56,13 @@ public struct TagUploadConverter: AssessmentConverter {
                 help: "The exact tag name as it should appear in eduCLIMBER.",
                 placeholder: "Special Education"),
             PromptField(
+                key: "include_tag_flag", label: "Include Tag Flag Column?",
+                kind: .choice(["No", "Yes"]),
+                help: "Most tag upload formats don't use a flag value -- leave this off unless "
+                    + "yours does."),
+            PromptField(
                 key: "tag_flag", label: "Tag Flag", kind: .text(pattern: ".*"),
-                help: "Leave blank if this tag upload format doesn't use a flag value.",
+                help: "Only used when \"Include Tag Flag Column?\" above is Yes.",
                 placeholder: "Y", isRequired: false),
         ]
     }
@@ -133,13 +140,19 @@ public struct TagUploadConverter: AssessmentConverter {
 
         let schoolYear = trimmed(answers["school_year"])
         let tagName = trimmed(answers["tag_name"])
+        let includeTagFlag = trimmed(answers["include_tag_flag"]).caseInsensitiveCompare("Yes")
+            == .orderedSame
         let tagFlag = trimmed(answers["tag_flag"])
 
         // Best-effort fallback only -- a missing or unreadable roster file
         // just means no fixes are available yet, not a reason to stop.
         let roster = StudentRosterLookup((try? StudentRosterStore.load(from: rosterStoreURL)) ?? [])
 
-        var result = ConversionResult(columns: outputColumns)
+        // Dropped from the export entirely when not requested, rather than
+        // just left blank -- a column of nothing is still a column eduCLIMBER
+        // has to be told to ignore.
+        let outputCols = includeTagFlag ? outputColumns : outputColumns.filter { $0 != "Tag Flag" }
+        var result = ConversionResult(columns: outputCols)
         var seenStudentIDs: Set<String> = []
         for (index, row) in table.rows.enumerated() {
             let rowNumber = table.rowNumber(index)
