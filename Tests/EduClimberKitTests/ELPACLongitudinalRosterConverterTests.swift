@@ -5,7 +5,7 @@ final class ELPACLongitudinalRosterConverterTests: XCTestCase {
     let converter = ELPACLongitudinalRosterConverter()
 
     func answers(
-        year: String = "2026-2027", tagNamePrefix: String = "ELPI Level ",
+        year: String = "2026-2027", tagNamePrefix: String = "ELPI Level",
         includeTagFlag: String = "No", tagFlag: String? = nil
     ) -> [String: String] {
         var values = [
@@ -40,8 +40,16 @@ final class ELPACLongitudinalRosterConverterTests: XCTestCase {
     func testCustomPrefixIsHonored() throws {
         let result = try Pipeline.convertFile(
             converter: converter, url: fixtureURL(),
-            answers: answers(tagNamePrefix: "ELPI"))
-        XCTAssertEqual(result.rows.first?["Tag Name"], "ELPI3L")
+            answers: answers(tagNamePrefix: "English Proficiency"))
+        XCTAssertEqual(result.rows.first?["Tag Name"], "English Proficiency 3L")
+    }
+
+    /// A blank prefix isn't an error -- the level stands on its own rather
+    /// than leaving a stray leading space.
+    func testBlankPrefixUsesTheBareLevel() throws {
+        let result = try Pipeline.convertFile(
+            converter: converter, url: fixtureURL(), answers: answers(tagNamePrefix: ""))
+        XCTAssertEqual(result.rows.first?["Tag Name"], "3L")
     }
 
     /// A student with no Academic Year on file yet has no level to tag them

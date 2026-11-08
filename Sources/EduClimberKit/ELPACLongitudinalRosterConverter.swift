@@ -7,11 +7,12 @@ import Foundation
 /// whole batch here: every student can land on a different ELPI level (e.g.
 /// "1", "2L", "2H", "3H", "4") for the current Academic Year --
 /// `ELPACLongitudinalReader` has already picked that year out of each
-/// student's full testing history -- so the Tag Name is built per row,
-/// appending that level to a prefix typed in once (e.g. "ELPI Level " +
-/// "2H" -> "ELPI Level 2H"). A student with no current-year ELPI (no testing
-/// history on file yet) has nothing to tag them with, so that row is flagged
-/// rather than guessed at.
+/// student's full testing history -- so the Tag Name is built per row, as a
+/// prefix typed in once plus that level, joined by a space (e.g. "ELPI
+/// Level" + "2H" -> "ELPI Level 2H"); the bare level is used when the prefix
+/// is left blank. A student with no current-year ELPI (no testing history on
+/// file yet) has nothing to tag them with, so that row is flagged rather
+/// than guessed at.
 public struct ELPACLongitudinalRosterConverter: AssessmentConverter {
     /// Where the shared Student Roster lives. Injectable so tests can point
     /// at a temporary file instead of the real, shared Application Support
@@ -41,8 +42,8 @@ public struct ELPACLongitudinalRosterConverter: AssessmentConverter {
                 placeholder: "2026-2027", defaultValue: EurekaMathConverter.currentSchoolYear()),
             PromptField(
                 key: "tag_name_prefix", label: "Tag Name Prefix", kind: .text(pattern: ".*"),
-                help: "Each student's ELPI level is appended to this, e.g. \"ELPI Level 2H\".",
-                placeholder: "ELPI Level ", defaultValue: "ELPI Level "),
+                help: "Each student's ELPI level is appended after a space, e.g. \"ELPI Level 2H\".",
+                placeholder: "ELPI Level", defaultValue: "ELPI Level"),
             PromptField(
                 key: "include_tag_flag", label: "Include Tag Flag Column?",
                 kind: .choice(["No", "Yes"]),
@@ -175,7 +176,7 @@ public struct ELPACLongitudinalRosterConverter: AssessmentConverter {
                 "Student First Name": name.first,
                 "Student Last Name": name.last,
                 "School Year": schoolYear,
-                "Tag Name": tagNamePrefix + elpiLevel,
+                "Tag Name": tagNamePrefix.isEmpty ? elpiLevel : "\(tagNamePrefix) \(elpiLevel)",
                 "Tag Flag": tagFlag,
             ])
         }
