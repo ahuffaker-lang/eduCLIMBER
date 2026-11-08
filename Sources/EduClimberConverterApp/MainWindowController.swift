@@ -488,21 +488,25 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
         }
 
         do {
-            let converted = try Pipeline.convert(
+            var converted = try Pipeline.convert(
                 converter: converter, table: table, answers: answers, mapping: mapping)
             let name = sourceURL?.lastPathComponent ?? "this file"
-            if !converted.errors.isEmpty || !converted.notices.isEmpty {
-                // Blank and half-filled rows are normal in a real export, and a
+            if !converted.errors.isEmpty || !converted.notices.isEmpty || !converted.reviewRows.isEmpty {
+                // Blank and half-filled rows are normal in a real export, a
                 // benchmark disagreement is worth a look even when nothing blocks
-                // the export -- so the review window opens for either case, not
-                // just when something has to be skipped.
+                // the export, and a row awaiting approval (e.g. Eureka Math's
+                // not-yet-"done" attempts) needs an explicit decision -- so the
+                // review window opens for any of these, not just when something
+                // has to be skipped.
+                let pendingNote = converted.reviewRows.isEmpty
+                    ? "" : "\(converted.reviewRows.count) row(s) needing approval, "
                 setStatus(
                     "\(converted.rows.count) row(s) ready, "
-                    + "\(converted.skippedRowCount) row(s) with problems, "
+                    + "\(converted.skippedRowCount) row(s) with problems, " + pendingNote
                     + "\(converted.noticeIssues.count) row(s) with benchmark notices "
                     + "in \(name):\n\n" + converted.fullReport())
                 guard let window else { return }
-                let decision = ReviewIssuesSheet.run(
+                let (decision, approvedReviewRowNumbers) = ReviewIssuesSheet.run(
                     over: window, result: converted, fileName: name)
                 if decision == .retryConversion {
                     // A fix just saved to the Student Roster only takes effect
@@ -512,7 +516,18 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
                     convert()
                     return
                 }
-                guard decision == .skipAndContinue, converted.hasUsableRows else {
+                guard decision == .skipAndContinue else {
+                    setStatus(
+                        "Conversion cancelled — nothing was exported.\n"
+                        + "\(converted.skippedRowCount) row(s) need fixing in \(name):\n\n"
+                        + converted.fullReport())
+                    return
+                }
+                // Checked rows join the export; the rest move to a separate
+                // "Rows Needing Review" file (saveResult() writes it out)
+                // instead of being silently dropped.
+                converted = converted.resolvingReviewRows(approved: approvedReviewRowNumbers)
+                guard converted.hasUsableRows else {
                     setStatus(
                         "Conversion cancelled — nothing was exported.\n"
                         + "\(converted.skippedRowCount) row(s) need fixing in \(name):\n\n"

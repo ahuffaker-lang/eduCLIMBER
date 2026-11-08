@@ -8,9 +8,13 @@ import Foundation
 /// what eduCLIMBER wants here; everything else is skipped without comment,
 /// not flagged as a problem, since it was never meant to convert. Among
 /// Module Assessment rows, `assessment_status` further distinguishes a
-/// finished attempt ("done") from one still in progress -- that one *is*
-/// flagged for review rather than skipped, since it is a real row someone
-/// needs to look at, not noise.
+/// finished attempt ("done") from one still in some other state -- that one
+/// still converts (it has a complete, valid row behind it), but as a
+/// `ReviewRow` rather than going straight into the export: the review
+/// window shows it with a checkbox so the user decides, row by row or all at
+/// once, whether an unfinished attempt should be included anyway. Anything
+/// left unchecked is written to a "Rows Needing Review" file alongside the
+/// main export instead of being silently dropped.
 public struct EurekaMathConverter: AssessmentConverter {
     public static let assessmentGroup = "Eureka Math"
     public static let assessmentName = "Eureka Math Module"
@@ -36,8 +40,10 @@ public struct EurekaMathConverter: AssessmentConverter {
         "Eureka Math module assessment export (Type of Assessment, Assessment Status, Grade, "
         + "Module, Student Id, Student, Date Completed, Overall Percentage, Performance Band). "
         + "Only rows marked as a Module Assessment (MA) are converted; quizzes and other "
-        + "assessment types are skipped. A Module Assessment not yet marked \"done\" is flagged "
-        + "for review rather than converted."
+        + "assessment types are skipped. A Module Assessment not yet marked \"done\" still "
+        + "converts, but goes to the review window for an individual approve/deny decision -- "
+        + "checked rows are included in the export, unchecked rows are written to a separate "
+        + "\"Rows Needing Review\" file instead."
 
     /// A single batch-wide value: the school year every row is stamped with.
     /// Pre-filled with the current academic year (computed from today's
@@ -148,18 +154,6 @@ public struct EurekaMathConverter: AssessmentConverter {
             let studentID = filled.studentID
             name = (first: filled.firstName, last: filled.lastName)
 
-            // Unlike the type_of_assessment filter above, a Module Assessment
-            // that is not yet "done" is a legitimate row someone needs to look
-            // at -- it is flagged for review rather than skipped without
-            // comment, since "open" here does not simply mean "not started".
-            if assessmentStatus.caseInsensitiveCompare(Self.doneStatus) != .orderedSame {
-                rowProblems.append(
-                    assessmentStatus.isEmpty
-                        ? "Assessment Status is blank."
-                        : "Assessment Status '\(assessmentStatus)' is not \"\(Self.doneStatus)\" "
-                            + "-- flagged for review.")
-            }
-
             if studentID.isEmpty { rowProblems.append("Student Id is blank.") }
 
             if name.first.isEmpty || name.last.isEmpty {
@@ -222,7 +216,22 @@ public struct EurekaMathConverter: AssessmentConverter {
                 "Score Detail 1 Proficiency Level": performanceBand,
                 "Score Detail 2 Date Completed": dateCompleted,
             ]
-            result.rows.append(output)
+
+            // Everything required is present and valid -- the only open
+            // question is whether this attempt is finished. A Module
+            // Assessment not yet marked "done" is a legitimate row someone
+            // needs to look at, so it goes to the review window as an
+            // individual approve/deny decision rather than being silently
+            // included or silently dropped.
+            if assessmentStatus.caseInsensitiveCompare(Self.doneStatus) == .orderedSame {
+                result.rows.append(output)
+            } else {
+                result.reviewRows.append(ReviewRow(
+                    rowNumber: rowNumber,
+                    label: label.isEmpty ? "Row \(rowNumber)" : label,
+                    status: assessmentStatus.isEmpty ? "(blank)" : assessmentStatus,
+                    output: output))
+            }
         }
         return result
     }

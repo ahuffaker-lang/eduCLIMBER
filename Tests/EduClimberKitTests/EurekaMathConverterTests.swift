@@ -66,8 +66,10 @@ final class EurekaMathConverterTests: XCTestCase {
     // MARK: - Filtering by assessment_status
 
     /// A Module Assessment that is not yet "done" (the real "open" row from
-    /// the district's sample, which already carries a full score) is flagged
-    /// for review, not skipped and not converted silently.
+    /// the district's sample, which already carries a full score) still
+    /// converts -- it's a complete, valid row -- but as a `ReviewRow` for the
+    /// user to approve or deny, not as a blocking error and not silently
+    /// included.
     func testOpenStatusIsFlaggedForReview() throws {
         let openRow =
             "3d1955fc,5143f205,634064f8,\"Grade 5, Module 1, Module Assessment 1\",open,MA,FALSE,"
@@ -77,10 +79,60 @@ final class EurekaMathConverterTests: XCTestCase {
         let url = try writeCSV(openRow)
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
         XCTAssertTrue(result.rows.isEmpty)
-        XCTAssertFalse(result.isClean)
-        XCTAssertTrue(
-            result.errors.contains { $0.message.contains("not \"done\"") },
-            "\(result.errors.map(\.message))")
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.reviewRows.count, 1)
+        XCTAssertEqual(result.reviewRows.first?.status, "open")
+        XCTAssertEqual(result.reviewRows.first?.label, "Garcia, Ethan")
+        XCTAssertEqual(result.reviewRows.first?.output["Student ID"], "20212318")
+        XCTAssertEqual(result.reviewRows.first?.output["Score"], "16")
+    }
+
+    /// A blank status is treated the same as any other non-"done" value --
+    /// still reviewable, not a hard block -- rather than special-cased.
+    func testBlankStatusWithOtherwiseCompleteDataIsFlaggedForReview() throws {
+        let blankStatus = sampleMARow.replacingOccurrences(of: ",done,MA,", with: ",,MA,")
+        let url = try writeCSV(blankStatus)
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.reviewRows.count, 1)
+        XCTAssertEqual(result.reviewRows.first?.status, "(blank)")
+    }
+
+    // MARK: - Resolving the approve/deny decision
+
+    func testApprovedReviewRowIsIncludedInRows() throws {
+        let openRow =
+            "3d1955fc,5143f205,634064f8,\"Grade 5, Module 1, Module Assessment 1\",open,MA,FALSE,"
+            + "5,1,em2cali,Christian Sorensen Elementary School,9033,\"Lawrence, Michael\","
+            + "Grade 5 - Lawrence - 1,egarcia18@whittiercity.net,20212318,\"Garcia, Ethan\","
+            + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n"
+        let url = try writeCSV(openRow)
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        let rowNumber = try XCTUnwrap(result.reviewRows.first?.rowNumber)
+
+        let resolved = result.resolvingReviewRows(approved: [rowNumber])
+        XCTAssertTrue(resolved.reviewRows.isEmpty)
+        XCTAssertEqual(resolved.rows.count, 1)
+        XCTAssertEqual(resolved.rows.first?["Student ID"], "20212318")
+        XCTAssertNil(resolved.followUpReport)
+    }
+
+    func testDeniedReviewRowGoesToTheFollowUpReportInstead() throws {
+        let openRow =
+            "3d1955fc,5143f205,634064f8,\"Grade 5, Module 1, Module Assessment 1\",open,MA,FALSE,"
+            + "5,1,em2cali,Christian Sorensen Elementary School,9033,\"Lawrence, Michael\","
+            + "Grade 5 - Lawrence - 1,egarcia18@whittiercity.net,20212318,\"Garcia, Ethan\","
+            + "9/25/26,9/25/26,4.41,27.5,16,not yet proficient\n"
+        let url = try writeCSV(openRow)
+        let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+
+        let resolved = result.resolvingReviewRows(approved: [])
+        XCTAssertTrue(resolved.reviewRows.isEmpty)
+        XCTAssertTrue(resolved.rows.isEmpty)
+        let followUp = try XCTUnwrap(resolved.followUpReport)
+        XCTAssertEqual(followUp.title, "Rows Needing Review")
+        XCTAssertEqual(followUp.rows.count, 1)
+        XCTAssertEqual(followUp.rows.first?["Student ID"], "20212318")
     }
 
     func testStatusMatchIsCaseInsensitive() throws {
@@ -133,10 +185,12 @@ final class EurekaMathConverterTests: XCTestCase {
 
     func testBlankRequiredFieldsAreFlagged() throws {
         // A non-empty attempt_id keeps this from being dropped as a blank row.
+        // Assessment Status is blank too, but a blank status alone is never a
+        // blocking error -- this row is caught by the other blank fields.
         let url = try writeCSV(",x,,,,MA,,,,,,,,,,,,,,,,,\n")
         let result = try Pipeline.convertFile(converter: converter, url: url, answers: answers())
+        XCTAssertTrue(result.reviewRows.isEmpty)
         let messages = result.errors.map(\.message)
-        XCTAssertTrue(messages.contains { $0.contains("Assessment Status is blank") })
         XCTAssertTrue(messages.contains { $0.contains("Student Id is blank") })
         XCTAssertTrue(messages.contains { $0.contains("Student is blank") })
         XCTAssertTrue(messages.contains { $0.contains("Grade is blank") })

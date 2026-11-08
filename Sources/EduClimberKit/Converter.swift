@@ -120,6 +120,29 @@ public struct FollowUpReport: Equatable {
     }
 }
 
+/// A row that converted cleanly -- every required field is present and
+/// valid -- but still needs a human decision before it can be exported, e.g.
+/// an assessment not yet marked complete. Shown in the review window with a
+/// checkbox rather than as a Problem (nothing is wrong with it) or silently
+/// included (the converter can't decide this on its own).
+public struct ReviewRow: Equatable {
+    /// 1-based spreadsheet row number, as shown in Excel.
+    public let rowNumber: Int
+    /// A short label identifying the row, e.g. "Garcia, Ethan".
+    public let label: String
+    /// The value that triggered review, e.g. the raw Assessment Status.
+    public let status: String
+    /// The fully-built output row -- ready to export as-is if approved.
+    public let output: [String: String]
+
+    public init(rowNumber: Int, label: String, status: String, output: [String: String]) {
+        self.rowNumber = rowNumber
+        self.label = label
+        self.status = status
+        self.output = output
+    }
+}
+
 public struct ConversionResult {
     public var columns: [String]
     public var rows: [[String: String]]
@@ -129,19 +152,23 @@ public struct ConversionResult {
     /// converts (with the benchmark's value); a notice just surfaces the
     /// disagreement rather than let it pass silently.
     public var notices: [RowError]
+    /// Rows awaiting an approve/deny decision -- see `ReviewRow`. Resolved by
+    /// `resolvingReviewRows(approved:)` once the user has decided.
+    public var reviewRows: [ReviewRow]
     /// A converter-specific report worth saving as its own file alongside the
     /// main export. `nil` when a converter has nothing like this (the default).
     public var followUpReport: FollowUpReport?
 
     public init(
         columns: [String], rows: [[String: String]] = [],
-        errors: [RowError] = [], notices: [RowError] = [],
+        errors: [RowError] = [], notices: [RowError] = [], reviewRows: [ReviewRow] = [],
         followUpReport: FollowUpReport? = nil
     ) {
         self.columns = columns
         self.rows = rows
         self.errors = errors
         self.notices = notices
+        self.reviewRows = reviewRows
         self.followUpReport = followUpReport
     }
 
@@ -149,6 +176,31 @@ public struct ConversionResult {
 
     /// Rows that converted and can be exported.
     public var hasUsableRows: Bool { !rows.isEmpty }
+
+    /// Applies the user's approve/deny decision from the review window:
+    /// approved rows join `rows` for export, the rest are written to
+    /// `followUpReport` instead of being silently dropped. `reviewRows` is
+    /// left empty afterward -- this consumes the decision, so calling it a
+    /// second time (e.g. by mistake, on a result with no review rows left)
+    /// is a harmless no-op.
+    public func resolvingReviewRows(approved: Set<Int>) -> ConversionResult {
+        guard !reviewRows.isEmpty else { return self }
+        var result = self
+        var deniedRows: [[String: String]] = []
+        for review in reviewRows {
+            if approved.contains(review.rowNumber) {
+                result.rows.append(review.output)
+            } else {
+                deniedRows.append(review.output)
+            }
+        }
+        if !deniedRows.isEmpty {
+            result.followUpReport = FollowUpReport(
+                title: "Rows Needing Review", columns: result.columns, rows: deniedRows)
+        }
+        result.reviewRows = []
+        return result
+    }
 
     /// Problems grouped by spreadsheet row, in the order they appear in the
     /// file. One row can fail for several reasons (a blank ID *and* a blank
