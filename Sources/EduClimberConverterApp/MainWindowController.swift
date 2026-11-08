@@ -12,6 +12,7 @@ final class MainWindowController: NSWindowController, NSTextFieldDelegate {
     private let converters: [AssessmentConverter] = [
         RunningRecordsConverter(), HFWConverter(), EurekaMathConverter(), SkillAssessmentConverter(),
         FormativeConverter(), TagUploadConverter(), HFWListConverter(),
+        ELPACLongitudinalRosterConverter(),
     ]
     private var converter: AssessmentConverter { converters[assessmentPopUp.indexOfSelectedItem] }
 
