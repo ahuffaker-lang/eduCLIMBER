@@ -57,9 +57,9 @@ public struct TagUploadConverter: AssessmentConverter {
                 placeholder: "Special Education"),
             PromptField(
                 key: "include_tag_flag", label: "Include Tag Flag Column?",
-                kind: .choice(["No", "Yes"]),
+                kind: .choice(["No", "Yes"]), isRequired: false,
                 help: "Most tag upload formats don't use a flag value -- leave this off unless "
-                    + "yours does."),
+                    + "yours does. An unanswered or missing value behaves the same as \"No\"."),
             PromptField(
                 key: "tag_flag", label: "Tag Flag", kind: .text(pattern: ".*"),
                 help: "Only used when \"Include Tag Flag Column?\" above is Yes.",
