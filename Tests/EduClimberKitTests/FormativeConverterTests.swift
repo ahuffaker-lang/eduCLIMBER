@@ -337,6 +337,106 @@ final class FormativeConverterTests: XCTestCase {
         XCTAssertEqual(result.rows.first?["Student Grade Level"], "6")
     }
 
+    /// Exactly the gap a real district hit: a row with no export email and no
+    /// saved Formative ID Match used to be a dead end even after "Fix &
+    /// Remember" saved an entry for this student, because the shared lookup
+    /// only matched by email -- which this row still doesn't have. Now the
+    /// student's name (always present on the row, even without an email)
+    /// finds the shared entry, picks up its email, and the rest of the
+    /// lookup runs exactly as if the export had supplied it.
+    func testBlankEmailFallsBackToTheSharedStudentRosterByName() throws {
+        let rosterStoreURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(
+                email: "ahernandezzepeda54@whittiercity.net", firstName: "Agustin",
+                lastName: "Hernandez Zepeda")],
+            to: rosterStoreURL)
+        let converterWithRoster = FormativeConverter(
+            matchStoreURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                .appendingPathComponent("formative_id_matches.csv"),
+            rosterStoreURL: rosterStoreURL)
+
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: roster.path), using: converterWithRoster)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student ID"], "20221371")
+    }
+
+    /// When the shared entry found by name already carries a Student ID and
+    /// Grade directly -- e.g. typed into "Fix & Remember" without an email
+    /// at all -- that's enough on its own; there was never a need to also
+    /// resolve an email just to look the same information up again.
+    func testBlankEmailResolvesDirectlyFromASharedEntryWithNoEmailAtAll() throws {
+        let rosterStoreURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(
+                studentID: "20221371", firstName: "Agustin", lastName: "Hernandez Zepeda", grade: "6")],
+            to: rosterStoreURL)
+        let converterWithRoster = FormativeConverter(
+            matchStoreURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                .appendingPathComponent("formative_id_matches.csv"),
+            rosterStoreURL: rosterStoreURL)
+
+        let emptyRoster = try writeRosterCSV([])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: emptyRoster.path), using: converterWithRoster)
+        XCTAssertTrue(result.isClean, "\(result.errors.map(\.description))")
+        XCTAssertEqual(result.rows.first?["Student ID"], "20221371")
+        XCTAssertEqual(result.rows.first?["Student Grade Level"], "6")
+    }
+
+    /// A Student ID alone (no Grade yet) gets this row past the "no email"
+    /// dead end, but Formative's output still needs a Grade -- so it's
+    /// correctly flagged as its own, more specific problem rather than
+    /// silently succeeding or repeating the original "no email" message.
+    func testBlankEmailWithAStudentIDButNoGradeIsFlaggedForGradeNotEmail() throws {
+        let rosterStoreURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("student_roster.csv")
+        try StudentRosterStore.save(
+            [StudentRosterEntry(
+                studentID: "20221371", firstName: "Agustin", lastName: "Hernandez Zepeda")],
+            to: rosterStoreURL)
+        let converterWithRoster = FormativeConverter(
+            matchStoreURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                .appendingPathComponent("formative_id_matches.csv"),
+            rosterStoreURL: rosterStoreURL)
+
+        let emptyRoster = try writeRosterCSV([])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(
+            url, answers: answers(rosterPath: emptyRoster.path), using: converterWithRoster)
+        XCTAssertTrue(result.rows.isEmpty)
+        XCTAssertTrue(
+            result.errors.contains { $0.message.contains("No Grade on file in the Student Roster") },
+            "\(result.errors.map(\.message))")
+        XCTAssertFalse(
+            result.errors.contains { $0.message.contains("has no email in the export") },
+            "the Student ID match should already have cleared the email blocker: "
+            + "\(result.errors.map(\.message))")
+    }
+
+    /// Without any shared match at all, the original guidance still applies
+    /// -- and now also mentions Fix & Remember as an option.
+    func testNoEmailWithNoSharedMatchStillMentionsBothFixOptions() throws {
+        let roster = try writeRosterCSV([(email: "ahernandezzepeda54@whittiercity.net", id: "20221371", grade: "6")])
+        let url = try writeCSV(blankEmailRow)
+        let result = try convert(url, answers: answers(rosterPath: roster.path))
+        XCTAssertTrue(
+            result.errors.contains { $0.message.contains("Fix & Remember") },
+            "\(result.errors.map(\.message))")
+    }
+
     // MARK: - Score parsing
 
     func testScoreIsTheBarePercentNumber() throws {

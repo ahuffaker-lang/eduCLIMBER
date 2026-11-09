@@ -18,9 +18,12 @@ import Foundation
 /// Formative's own "Student ID" column is Formative's internal id, not the
 /// district's, so it's useless as eduCLIMBER's Student ID. The real Student
 /// ID (and Grade) instead comes from a roster file the user builds for this
-/// purpose, joined here by email address -- falling back to the persisted
-/// FormativeIDMatchStore (managed in its own window) when Formative didn't
-/// supply an email for this row at all.
+/// purpose, joined here by email address. When Formative didn't supply an
+/// email for this row at all, two fallbacks apply, in order: the persisted
+/// FormativeIDMatchStore (managed in its own window, keyed by Formative's
+/// own id), then the shared Student Roster by the student's name (the same
+/// "Fix & Remember" flow every other converter uses) -- which can supply
+/// either an email to resume the usual lookup, or a Student ID directly.
 ///
 /// A student the export shows as assigned but never submitted (no
 /// Timestamp, no score) is flagged as a blocking problem -- there's nothing
@@ -175,6 +178,23 @@ public struct FormativeConverter: AssessmentConverter {
 
             let formativeLastName = table.value(row, header("last_name"))
             let formativeFirstName = table.value(row, header("first_name"))
+
+            // When there's still no email -- no export email, no saved
+            // Formative ID Match -- the shared Student Roster (the same
+            // "Fix & Remember" flow every other converter uses) can still
+            // resolve this row by name. Looked up once, by whichever of
+            // email or name is available right now, and reused below: if it
+            // has an email, that's filled in so the per-batch roster lookup
+            // just below still runs normally; if it only has a Student ID,
+            // that's used directly further down -- the email lookup was
+            // only ever a means to the same end.
+            let sharedMatch = sharedRoster.entry(
+                studentID: "", email: email, firstName: formativeFirstName, lastName: formativeLastName)
+            if email.isEmpty, let sharedMatch, !sharedMatch.email.isEmpty {
+                email = sharedMatch.email
+                usedSavedMatch = true
+            }
+
             let timestamp = table.value(row, header("timestamp"))
             let percentText = table.value(row, header("score_percent"))
 
@@ -192,11 +212,13 @@ public struct FormativeConverter: AssessmentConverter {
             let label = !name.isEmpty ? name : (!email.isEmpty ? email : "Formative ID \(formativeID)")
             let labelPrefix = "\(label) — "
 
-            guard !email.isEmpty else {
+            let hasDirectIDMatch = email.isEmpty && !(sharedMatch?.studentID ?? "").isEmpty
+            guard !email.isEmpty || hasDirectIDMatch else {
                 result.errors.append(RowError(
                     rowNumber: rowNumber,
                     message: labelPrefix + "has no email in the export and no saved match -- "
-                        + "add one in Tools > Formative ID Matches."))
+                        + "add one in Tools > Formative ID Matches, or use \"Fix & Remember\" "
+                        + "with this student's Student ID or email."))
                 continue
             }
             if usedSavedMatch {
@@ -227,9 +249,9 @@ public struct FormativeConverter: AssessmentConverter {
 
             // If the per-batch roster is missing this email entirely, or has
             // it but with a blank Student ID or Grade, the shared Student
-            // Roster is checked next -- it's where a fix made from the
-            // review window (or the Student Roster window directly) ends up.
-            let sharedMatch = sharedRoster.entry(forEmail: email)
+            // Roster (`sharedMatch`, found above by email or by name) is
+            // checked next -- it's where a fix made from the review window
+            // (or the Student Roster window directly) ends up.
             var studentID = ""
             var grade = ""
             if let match = rosterMatch {
@@ -240,11 +262,12 @@ public struct FormativeConverter: AssessmentConverter {
             } else if let sharedMatch, !sharedMatch.isBlank {
                 studentID = sharedMatch.studentID
                 grade = sharedMatch.grade
+                let suffix = email.isEmpty ? "for this student." : "for \(email) either."
                 if studentID.isEmpty {
-                    rowProblems.append("No Student ID on file in the Student Roster for \(email) either.")
+                    rowProblems.append("No Student ID on file in the Student Roster \(suffix)")
                 }
                 if grade.isEmpty {
-                    rowProblems.append("No Grade on file in the Student Roster for \(email) either.")
+                    rowProblems.append("No Grade on file in the Student Roster \(suffix)")
                 }
             } else {
                 rowProblems.append("Email \(email) was not found in the roster file.")
