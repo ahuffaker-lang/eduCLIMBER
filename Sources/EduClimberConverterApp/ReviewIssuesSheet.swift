@@ -347,9 +347,10 @@ final class ReviewIssuesSheet: NSWindowController {
               result.issues.indices.contains(row)
         else { return }
         let issue = result.issues[row]
-        guard let entry = StudentFixSheet.run(over: window, problemSummary: issue.description) else {
-            return
-        }
+        let prefill = StudentRosterEntry.knownFields(fromErrorMessage: issue.problems.first ?? "")
+        guard let entry = StudentFixSheet.run(
+            over: window, problemSummary: issue.description, prefill: prefill)
+        else { return }
         do {
             let existing = try StudentRosterStore.load()
             let merged = StudentRosterStore.upsert([entry], into: existing)

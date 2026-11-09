@@ -2,9 +2,9 @@ import Foundation
 
 /// One student's known facts, built up over time by fixing conversion
 /// errors -- the shared cross-reference every converter falls back to when
-/// its own source file is missing (or has wrong) a required field. Keyed by
-/// whichever of Student ID or email a row does have; a blank field here
-/// just means "not known yet," not "blank."
+/// its own source file is missing (or has wrong) a required field. Looked up
+/// by whichever of Student ID, email, or first+last name a row does have; a
+/// blank field here just means "not known yet," not "blank."
 public struct StudentRosterEntry: Equatable {
     public var studentID: String
     public var email: String
@@ -26,24 +26,63 @@ public struct StudentRosterEntry: Equatable {
     public var isBlank: Bool {
         studentID.isEmpty && email.isEmpty && firstName.isEmpty && lastName.isEmpty && grade.isEmpty
     }
+
+    /// Every converter here builds its row errors the same way -- `"Label —
+    /// problem text"`, where Label is either "Last, First", "Student ID
+    /// NNNN", or (Formative) a bare email -- so whichever of those a row's
+    /// own label already shows can be pulled back out of the message and
+    /// used to start "Fix & Remember" from what's already known, rather than
+    /// blank. This matters because the field actually missing (often the
+    /// Student ID itself) is usually not something a future lookup can find
+    /// the fix by -- the row's name is -- so a fix that supplies only the
+    /// missing field and drops what the row already had correct can never
+    /// be found again on retry. A label this doesn't recognize (e.g.
+    /// Formative's own opaque "Formative ID NNNN", or a combined name with
+    /// no comma) yields a blank entry rather than a guess.
+    public static func knownFields(fromErrorMessage message: String) -> StudentRosterEntry {
+        guard let separatorRange = message.range(of: " — ") else { return StudentRosterEntry() }
+        let label = String(message[message.startIndex..<separatorRange.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+        if label.hasPrefix("Student ID ") {
+            let id = label.dropFirst("Student ID ".count).trimmingCharacters(in: .whitespaces)
+            return StudentRosterEntry(studentID: id)
+        }
+        if label.contains("@") {
+            return StudentRosterEntry(email: label)
+        }
+        if label.contains(",") {
+            let parts = label.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty {
+                return StudentRosterEntry(firstName: parts[1], lastName: parts[0])
+            }
+        }
+        return StudentRosterEntry()
+    }
 }
 
-/// A ready-to-query view of the roster, indexed by Student ID and by email
-/// once so every converter's lookups during one conversion don't re-scan
-/// the list per row.
+/// A ready-to-query view of the roster, indexed by Student ID, by email, and
+/// by first+last name once so every converter's lookups during one
+/// conversion don't re-scan the list per row.
 public struct StudentRosterLookup {
     private let byID: [String: StudentRosterEntry]
     private let byEmail: [String: StudentRosterEntry]
+    private let byName: [String: StudentRosterEntry]
 
     public init(_ entries: [StudentRosterEntry]) {
         var byID: [String: StudentRosterEntry] = [:]
         var byEmail: [String: StudentRosterEntry] = [:]
+        var byName: [String: StudentRosterEntry] = [:]
         for entry in entries {
             if !entry.studentID.isEmpty { byID[entry.studentID] = entry }
             if !entry.email.isEmpty { byEmail[entry.email.lowercased()] = entry }
+            if let key = Self.nameKey(first: entry.firstName, last: entry.lastName) {
+                byName[key] = entry
+            }
         }
         self.byID = byID
         self.byEmail = byEmail
+        self.byName = byName
     }
 
     public func entry(forID studentID: String) -> StudentRosterEntry? {
@@ -54,20 +93,36 @@ public struct StudentRosterLookup {
         email.isEmpty ? nil : byEmail[email.lowercased()]
     }
 
-    /// Whichever of Student ID or email the caller has to look up by,
-    /// preferring Student ID since it's the more stable identifier.
-    public func entry(studentID: String, email: String) -> StudentRosterEntry? {
+    /// A name alone is a much weaker key than an ID or email -- two students
+    /// can share one -- so this is only ever consulted as a last resort (see
+    /// `entry(studentID:email:firstName:lastName:)`), and only when both
+    /// halves are given; a first name or last name alone never matches.
+    public func entry(forFirstName firstName: String, lastName: String) -> StudentRosterEntry? {
+        Self.nameKey(first: firstName, last: lastName).flatMap { byName[$0] }
+    }
+
+    /// Whichever of Student ID, email, or first+last name the caller has to
+    /// look up by, preferring Student ID (the most stable identifier), then
+    /// email, then name.
+    public func entry(
+        studentID: String, email: String, firstName: String = "", lastName: String = ""
+    ) -> StudentRosterEntry? {
         entry(forID: studentID) ?? entry(forEmail: email)
+            ?? entry(forFirstName: firstName, lastName: lastName)
     }
 
     /// Fills in whatever the caller's own fields are blank, from the
     /// matching roster entry. A field the caller already has always wins --
-    /// the roster only fills a gap, it never overwrites a real answer.
+    /// the roster only fills a gap, it never overwrites a real answer. A row
+    /// found only by name still gets its Student ID/email filled in from the
+    /// match, the same as a row found by ID gets its name filled in.
     public func fill(
         studentID: String = "", email: String = "", firstName: String = "",
         lastName: String = "", grade: String = ""
     ) -> StudentRosterEntry {
-        guard let match = entry(studentID: studentID, email: email) else {
+        guard let match = entry(
+            studentID: studentID, email: email, firstName: firstName, lastName: lastName)
+        else {
             return StudentRosterEntry(
                 studentID: studentID, email: email, firstName: firstName,
                 lastName: lastName, grade: grade)
@@ -78,6 +133,14 @@ public struct StudentRosterLookup {
             firstName: firstName.isEmpty ? match.firstName : firstName,
             lastName: lastName.isEmpty ? match.lastName : lastName,
             grade: grade.isEmpty ? match.grade : grade)
+    }
+
+    /// Case- and whitespace-insensitive; `nil` unless both halves are given.
+    private static func nameKey(first: String, last: String) -> String? {
+        let first = first.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let last = last.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !first.isEmpty, !last.isEmpty else { return nil }
+        return "\(last)|\(first)"
     }
 }
 

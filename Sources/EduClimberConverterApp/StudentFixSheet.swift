@@ -6,6 +6,15 @@ import EduClimberKit
 /// down a separate file to fix and re-upload. Whatever they enter here is
 /// saved to the shared Student Roster, so it's filled in automatically for
 /// this student on every future conversion, not just this one row.
+///
+/// `prefill` starts the fields with whatever the row's own error message
+/// already showed was known (its name, email, or ID -- see
+/// `StudentRosterEntry.knownFields(fromErrorMessage:)`) -- not just blank,
+/// because the one field actually missing is often the very one a future
+/// lookup would need: a row missing its Student ID can only be found again
+/// next time by its name, so if the user types just the ID here and leaves
+/// the already-correct name blank, the saved entry has no name to be found
+/// by and the "same student" error comes right back on retry.
 final class StudentFixSheet: NSWindowController {
     private var accepted = false
     private let studentIDField = NSTextField()
@@ -16,8 +25,10 @@ final class StudentFixSheet: NSWindowController {
 
     /// Runs the sheet modally. Returns the entry to save, or nil if the user
     /// cancelled or left every field blank.
-    static func run(over parent: NSWindow, problemSummary: String) -> StudentRosterEntry? {
-        let sheet = StudentFixSheet(problemSummary: problemSummary)
+    static func run(
+        over parent: NSWindow, problemSummary: String, prefill: StudentRosterEntry = StudentRosterEntry()
+    ) -> StudentRosterEntry? {
+        let sheet = StudentFixSheet(problemSummary: problemSummary, prefill: prefill)
         guard let window = sheet.window else { return nil }
         parent.beginSheet(window, completionHandler: nil)
         NSApp.runModal(for: window)
@@ -33,12 +44,17 @@ final class StudentFixSheet: NSWindowController {
         return entry.isBlank ? nil : entry
     }
 
-    init(problemSummary: String) {
+    init(problemSummary: String, prefill: StudentRosterEntry = StudentRosterEntry()) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "Fix & Remember"
         super.init(window: window)
+        studentIDField.stringValue = prefill.studentID
+        emailField.stringValue = prefill.email
+        firstNameField.stringValue = prefill.firstName
+        lastNameField.stringValue = prefill.lastName
+        gradeField.stringValue = prefill.grade
         window.contentView = makeContentView(problemSummary: problemSummary)
     }
 

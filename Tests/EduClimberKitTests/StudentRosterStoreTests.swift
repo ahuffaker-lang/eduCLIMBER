@@ -154,4 +154,87 @@ final class StudentRosterStoreTests: XCTestCase {
         XCTAssertEqual(filled.studentID, "1")
         XCTAssertTrue(filled.firstName.isEmpty)
     }
+
+    // MARK: - Name is a fallback key, for when the row's own missing field
+    // is the very field (Student ID) a lookup would otherwise use
+
+    /// The exact bug this covers: a row missing its Student ID can't be
+    /// looked up by ID (it doesn't have one), so a fix saved under that ID
+    /// has to be found again by the name the row already has.
+    func testFillFindsAMatchByNameWhenStudentIDAndEmailAreBothBlank() {
+        let lookup = StudentRosterLookup([
+            StudentRosterEntry(studentID: "20212318", firstName: "Ethan", lastName: "Garcia"),
+        ])
+        let filled = lookup.fill(studentID: "", firstName: "Ethan", lastName: "Garcia")
+        XCTAssertEqual(filled.studentID, "20212318")
+    }
+
+    func testNameLookupIsCaseAndWhitespaceInsensitive() {
+        let lookup = StudentRosterLookup([
+            StudentRosterEntry(studentID: "1", firstName: "Ethan", lastName: "Garcia"),
+        ])
+        XCTAssertEqual(lookup.entry(forFirstName: " ethan ", lastName: " GARCIA ")?.studentID, "1")
+    }
+
+    /// A first or last name alone is too weak to key off of -- only a
+    /// matching pair counts.
+    func testNameLookupRequiresBothHalves() {
+        let lookup = StudentRosterLookup([
+            StudentRosterEntry(studentID: "1", firstName: "Ethan", lastName: "Garcia"),
+        ])
+        XCTAssertNil(lookup.entry(forFirstName: "Ethan", lastName: ""))
+        XCTAssertNil(lookup.entry(forFirstName: "", lastName: "Garcia"))
+    }
+
+    /// Student ID and email still win over a name match when either is
+    /// available -- name is the weakest key, used only as a last resort.
+    func testIDAndEmailAreStillPreferredOverName() {
+        let lookup = StudentRosterLookup([
+            StudentRosterEntry(studentID: "1", firstName: "Ethan", lastName: "Garcia", grade: "byID"),
+        ])
+        let filled = lookup.fill(studentID: "1", firstName: "Ethan", lastName: "Garcia")
+        XCTAssertEqual(filled.grade, "byID")
+    }
+
+    /// A roster entry saved with only a Student ID (no name) was never
+    /// indexed by name in the first place, so it can't be found by name --
+    /// this documents why Fix & Remember pre-fills the name from the row's
+    /// own error message instead of leaving the sheet blank.
+    func testAnEntryWithNoNameIsNotFoundByName() {
+        let lookup = StudentRosterLookup([StudentRosterEntry(studentID: "20212318")])
+        XCTAssertNil(lookup.entry(forFirstName: "Ethan", lastName: "Garcia"))
+    }
+
+    // MARK: - Recovering known fields from a converter's own error message
+
+    func testKnownFieldsParsesALastFirstLabel() {
+        let entry = StudentRosterEntry.knownFields(
+            fromErrorMessage: "Garcia, Ethan — Student ID is blank.")
+        XCTAssertEqual(entry, StudentRosterEntry(firstName: "Ethan", lastName: "Garcia"))
+    }
+
+    func testKnownFieldsParsesAStudentIDLabel() {
+        let entry = StudentRosterEntry.knownFields(
+            fromErrorMessage: "Student ID 20212318 — Student Name is blank.")
+        XCTAssertEqual(entry, StudentRosterEntry(studentID: "20212318"))
+    }
+
+    func testKnownFieldsParsesABareEmailLabel() {
+        let entry = StudentRosterEntry.knownFields(
+            fromErrorMessage: "egarcia18@whittiercity.net — has no email in the export.")
+        XCTAssertEqual(entry, StudentRosterEntry(email: "egarcia18@whittiercity.net"))
+    }
+
+    /// Formative's own opaque internal ID is not a Student ID -- prefilling
+    /// it into the Student ID field would be actively wrong, not just
+    /// unhelpful.
+    func testKnownFieldsIgnoresAFormativeIDLabel() {
+        let entry = StudentRosterEntry.knownFields(
+            fromErrorMessage: "Formative ID 3d1955fc — has no email in the export.")
+        XCTAssertTrue(entry.isBlank)
+    }
+
+    func testKnownFieldsReturnsBlankWhenThereIsNoLabelAtAll() {
+        XCTAssertTrue(StudentRosterEntry.knownFields(fromErrorMessage: "Grade is blank.").isBlank)
+    }
 }
