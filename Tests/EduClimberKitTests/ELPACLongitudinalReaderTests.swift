@@ -108,6 +108,41 @@ final class ELPACLongitudinalReaderTests: XCTestCase {
         XCTAssertEqual(table.rows[0]["Overall Performance Level"], "3H")
     }
 
+    /// A more recent "Alternate ELPAC" administration never carries an
+    /// Overall Performance Level in this report -- it must not shadow a real
+    /// Summative result from an earlier year. ELPAC policy is that the last
+    /// *obtained* level stays in effect until superseded.
+    func testFlattenFallsBackToTheMostRecentYearThatActuallyProducedALevel() throws {
+        let grid = [
+            Self.studentRow(name: "Ramos, Abraham", id: "20171340"),
+            Self.yearRow(testPurpose: "Summative", academicYear: "2020-21", gradeLevel: "01", overallLevel: "1"),
+            Self.yearRow(testPurpose: "Alternate", academicYear: "2021-22", gradeLevel: "02"),
+            Self.yearRow(testPurpose: "Alternate", academicYear: "2025-26", gradeLevel: "06"),
+        ]
+        let table = try ELPACLongitudinalReader.flatten(grid)
+        let row = table.rows[0]
+        XCTAssertEqual(row["Academic Year"], "2020-21")
+        XCTAssertEqual(row["Test Purpose"], "Summative")
+        XCTAssertEqual(row["Test Grade Level"], "01")
+        XCTAssertEqual(row["Overall Performance Level"], "1")
+    }
+
+    /// Unlike a student with no testing history at all, this one *was*
+    /// tested -- just never scored (an Initial with no Summative since, or
+    /// an Alternate-only history) -- so Academic Year/Test Purpose still
+    /// reflect that most recent attempt; only the level itself is blank.
+    func testFlattenShowsTheMostRecentAttemptWhenNoYearEverProducedALevel() throws {
+        let grid = [
+            Self.studentRow(name: "Aguilar, Emily E.", id: "20200371"),
+            Self.yearRow(testPurpose: "Initial", academicYear: "2020-21", gradeLevel: "KN"),
+        ]
+        let table = try ELPACLongitudinalReader.flatten(grid)
+        let row = table.rows[0]
+        XCTAssertEqual(row["Academic Year"], "2020-21")
+        XCTAssertEqual(row["Test Purpose"], "Initial")
+        XCTAssertEqual(row["Overall Performance Level"], "")
+    }
+
     func testFlattenHandlesMultipleStudentsAcrossARepeatedPageHeaderBlock() throws {
         let grid: [[String]] = [
             Self.studentRow(name: "Abundis, Kataleah C.", id: "20212207"),

@@ -20,9 +20,17 @@ import Foundation
 ///
 /// A tag only needs to know where a student stands *now*, not their whole
 /// testing history, so each student's year rows are collapsed down to just
-/// the most recent Academic Year. When that year has both an "Initial" and a
-/// "Summative" row (the Initial row is a placeholder with no scores yet,
-/// filled in once the Summative test is scored), the Summative row wins.
+/// one. That one is the most recent year that actually produced an Overall
+/// Performance Level -- not simply the most recent year attempted. An
+/// "Initial" row is a placeholder with no score until the Summative test is
+/// scored, and an "Alternate ELPAC" administration (for students with
+/// significant cognitive disabilities) never populates this column at all;
+/// either one, more recently attempted than a real result, must never shadow
+/// that result -- ELPAC policy is that the last *obtained* level stays in
+/// effect until superseded, not "whatever was most recently attempted." When
+/// a student has never once received a level, the most recent attempt is
+/// still used for Academic Year/Test Purpose/Grade (so the review window
+/// shows what was tried), but Overall Performance Level is left blank.
 public enum ELPACLongitudinalReader {
     public static func read(contentsOf url: URL) throws -> Table {
         try flatten(try readGrid(contentsOf: url))
@@ -150,25 +158,39 @@ public enum ELPACLongitudinalReader {
         var rows: [[String: String]] = []
         var rowNumbers: [Int] = []
         for block in blocks {
-            let mostRecent = mostRecentYear(block.years)
+            // When a real level exists, every displayed field comes from
+            // that one row -- never a blend of "this year's attempt" with
+            // "an older year's score," which would misrepresent which
+            // administration actually produced the level being tagged.
+            let valid = mostRecentYearWithALevel(block.years)
+            let chosen = valid ?? mostRecentAttempt(block.years)
             rows.append([
                 "Student Name": block.name,
                 "Student ID": block.studentID,
                 "English Proficiency": block.englishProficiency,
-                "Academic Year": mostRecent?.academicYear ?? "",
-                "Test Purpose": mostRecent?.testPurpose ?? "",
-                "Test Grade Level": mostRecent?.gradeLevel ?? "",
-                "Overall Performance Level": mostRecent?.overallPerformanceLevel ?? "",
+                "Academic Year": chosen?.academicYear ?? "",
+                "Test Purpose": chosen?.testPurpose ?? "",
+                "Test Grade Level": chosen?.gradeLevel ?? "",
+                "Overall Performance Level": valid?.overallPerformanceLevel ?? "",
             ])
-            rowNumbers.append(mostRecent?.rowNumber ?? block.headerRowNumber)
+            rowNumbers.append(chosen?.rowNumber ?? block.headerRowNumber)
         }
         return Table(headers: outputHeaders, rows: rows, rowNumbers: rowNumbers)
     }
 
-    /// The year row with the greatest Academic Year; when that year has both
-    /// an Initial and a Summative row, the Summative one (it carries the
-    /// real scores -- Initial is a placeholder of dashes until then).
-    private static func mostRecentYear(_ years: [YearRow]) -> YearRow? {
+    /// Among years that produced a real Overall Performance Level, the one
+    /// with the greatest Academic Year; when that year has both an Initial
+    /// and a Summative row, the Summative one. `nil` when no year ever
+    /// produced a level at all.
+    private static func mostRecentYearWithALevel(_ years: [YearRow]) -> YearRow? {
+        mostRecentAttempt(years.filter { !$0.overallPerformanceLevel.isEmpty })
+    }
+
+    /// The year row with the greatest Academic Year, regardless of whether
+    /// it produced a score; when that year has both an Initial and a
+    /// Summative row, the Summative one (it carries the real scores --
+    /// Initial is a placeholder of dashes until then).
+    private static func mostRecentAttempt(_ years: [YearRow]) -> YearRow? {
         guard !years.isEmpty else { return nil }
         let maxYear = years.compactMap { leadingYear($0.academicYear) }.max()
         let candidates = years.filter { leadingYear($0.academicYear) == maxYear }
